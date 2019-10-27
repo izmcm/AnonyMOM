@@ -14,7 +14,7 @@ var wg sync.WaitGroup
 
 var amqpQueues map[string]amqp.Queue = make(map[string]amqp.Queue)
 
-type AddTask struct {
+type MessageToSend struct {
 	Number   int
 	ClientId int
 }
@@ -72,13 +72,13 @@ func receiveData(receiveChannel <-chan amqp.Delivery, responseChannel *amqp.Chan
 		for message := range receiveChannel {
 			log.Printf("Received a message: %s", message.Body)
 
-			addTask := &AddTask{}
+			mes := &MessageToSend{}
 
-			err := json.Unmarshal(message.Body, addTask)
+			err := json.Unmarshal(message.Body, mes)
 			handleError(err, "Error decoding JSON")
 
-			num := addTask.Number
-			cid := addTask.ClientId
+			num := mes.Number
+			cid := mes.ClientId
 			data := Response{Number: num}
 
 			// return the data to channel

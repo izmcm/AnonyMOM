@@ -13,7 +13,7 @@ import (
 var amqpURL string = "amqp://guest:guest@localhost:5672/"
 var wg sync.WaitGroup
 
-type AddTask struct {
+type MessageToSend struct {
 	Number   int
 	ClientId int
 }
@@ -73,9 +73,9 @@ func main() {
 //  - responseChannel: channel to which messages will be send
 //  - clientId: client id that initially sent message
 func postData(channel *amqp.Channel, queue amqp.Queue, clientId int) {
-	addTask := AddTask{Number: rand.Intn(999), ClientId: clientId}
+	message := MessageToSend{Number: rand.Intn(999), ClientId: clientId}
 
-	body, err := json.Marshal(addTask)
+	body, err := json.Marshal(message)
 	handleError(err, "Error encoding JSON")
 
 	// publish message in queue
