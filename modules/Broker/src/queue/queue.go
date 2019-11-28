@@ -1,7 +1,7 @@
 package queue
 
 import (
-	// "container/list"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"message"
@@ -46,11 +46,11 @@ func PushMessageToQueue(msg message.AnonyMessage) bool {
 	return true
 }
 
-func GetMessage(name string) string {
+func GetMessage(name string) (string, error) {
 	data, err := ioutil.ReadFile("../database/" + name + ".txt")
 	if err != nil {
 		fmt.Println("File reading error", err)
-		return "error"
+		return "", err
 	}
 	sliceData := strings.Split(string(data), "\n")
 	msg := sliceData[0]
@@ -59,10 +59,15 @@ func GetMessage(name string) string {
 	err = ioutil.WriteFile("../database/"+name+".txt", []byte(totalData), 0644)
 	if err != nil {
 		fmt.Println("File reading error", err)
-		return "error"
+		return "", err
 	}
 
-	return msg
+	if msg == "" {
+		err := errors.New("Empty queue")
+		return msg, err
+	}
+
+	return msg, nil
 }
 
 func CreateQueue(name string) error {

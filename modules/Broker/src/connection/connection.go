@@ -1,16 +1,15 @@
 package main
 
 import (
-	"fmt"
-	// "io/ioutil"
 	"container/list"
 	"flag"
+	"fmt"
 	"github.com/gorilla/websocket"
 	"log"
 	"message"
 	"net/http"
 	"queueManager"
-	"strconv"
+	// "strconv"
 	"time"
 )
 
@@ -20,13 +19,12 @@ type Broker struct {
 }
 
 type Host struct {
-	ID         string
-	Connection *websocket.Conn
+	ID            string
+	Connection    *websocket.Conn
+	Subscriptions list.List
 }
 
 var hostList list.List
-
-// var connections = make(map[websocket.Conn]*list.List) // host:privilégios
 
 func (broker Broker) GETandPOST(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
@@ -36,41 +34,43 @@ func (broker Broker) GETandPOST(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case "GET":
-		for k, v := range r.URL.Query() {
-			fmt.Printf("%s: %s\n", k, v)
-		}
-		// w.Write([]byte("Received a GET request\n"))
 		// TODO: Setup the data to run into another goroutine
 		// in order to process the request, but for now let's
 		// just do the stuff like if we are in a single goroutine
 		// and fuck this shit!
+
 		fmt.Println(r)
 		fmt.Println(r.URL)
+		fmt.Println(r.Header)
 
-		params := r.URL.Query()
-		fmt.Println(params["user"])
+		fmt.Println(r.Header["Subscriptions"])
 
-		// TODO: we still must make the checkup for the handshake
-		// of a websocket and also make a proper usage of the
-		// websocket communication method.
-		//
 		// Verify if we are asking for the websocket upgrade
 		if r.Header["Upgrade"][0] == "websocket" {
 			connection := echo(w, r)
 			// TODO: Extract to a host connection function later
+			// TODO: Setup the userID in the Header
 			host := Host{ID: "abc", Connection: connection}
 			hostList.PushBack(host)
-		} else if params["token"] != nil && params["queue"] != nil && params["content"] != nil {
-			// TODO: decrypt and make sense of request
-			message := message.AnonyMessage{SenderToken: params["token"][0], Queue: params["queue"][0], Content: params["content"][0]}
+		} else {
+			w.Write([]byte("Request Not processed by the server\n"))
+		}
+	case "POST":
+		// TODO: verify who can put data in which channel before just
+		// allowing the users to insert any data, but for now, fuck you!
+		err := r.ParseForm()
+		if err != nil {
+			panic(err)
+		}
+		data := r.Form
+		fmt.Println("POST HERE")
+		fmt.Println(data)
+		fmt.Println("")
+
+		if data["token"] != nil && data["queue"] != nil && data["content"] != nil {
+			message := message.AnonyMessage{SenderToken: data["token"][0], Queue: data["queue"][0], Content: data["content"][0]}
 			broker.Manager.InsertMessageToQueue(message)
 			w.Write([]byte("Data inserted\n"))
-		} else if params["token"] != nil || params["queue"] != nil {
-			// TODO: decrypt and make sense of request
-			// message := message.AnonyMessage{SenderToken: params["token"][0], Queue: params["queue"][0], Content: params["content"][0]}
-			message := params["queue"][0]
-			messageData := broker.Manager.GetMessageFromQueue(message)
-			w.Write([]byte(messageData + "\n"))
 		} else {
 			w.Write([]byte("Request Not processed by the server\n"))
 		}
@@ -118,19 +118,35 @@ func echo(w http.ResponseWriter, r *http.Request) *websocket.Conn {
 	// }
 
 	// connections[c].PushBack()
-
+	// fmt.Println(c)
 	c.WriteMessage(websocket.TextMessage, []byte("bora dale boy"))
 	c.WriteMessage(websocket.TextMessage, []byte("tais registrado boy!"))
 
 	return c
 }
 
-func broadcastMessage() {
+func (broker Broker) listenAndBroadcastQueue(name string) {
+	for {
+		message, err := broker.Manager.GetMessageFromQueue(name)
+		if err != nil {
+			// No messages
+		} else {
+			// TODO: make the broadcast only to the queue
+
+			// TODO: check if there's someone connected before
+			// remove from the queue
+			fmt.Println("Making broadcast")
+			broadcastMessage(message)
+		}
+	}
+}
+
+func broadcastMessage(message string) {
 	id := 0
 	for host := hostList.Front(); host != nil; host = host.Next() {
 		id += 1
 		c := host.Value.(Host).Connection
-		err := c.WriteMessage(websocket.TextMessage, []byte("hello "+strconv.Itoa(id)))
+		err := c.WriteMessage(websocket.TextMessage, []byte(message))
 		if err != nil {
 			log.Println("write:", err)
 			return
@@ -144,9 +160,9 @@ func broadcastTimer() {
 
 	for {
 		select {
-		case t := <-ticker.C:
-			fmt.Println(t)
-			broadcastMessage()
+		case <-ticker.C:
+			// fmt.Println(t)
+			broadcastMessage("tick")
 		}
 	}
 }
@@ -161,6 +177,7 @@ func main() {
 	// http.HandleFunc("/echo", echo)
 
 	go broadcastTimer()
+	// go broker.listenAndBroadcastQueue("kk")
 
 	// http.ListenAndServe(":3001", nil)
 	http.ListenAndServe(":8082", nil)

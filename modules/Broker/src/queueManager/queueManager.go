@@ -20,9 +20,9 @@ func (manager *AnonyQueueManager) InsertMessageToQueue(content message.AnonyMess
 	}
 }
 
-func (manager *AnonyQueueManager) GetMessageFromQueue(queueName string) string {
-	msg := queue.GetMessage(queueName)
-	return msg
+func (manager *AnonyQueueManager) GetMessageFromQueue(queueName string) (string, error) {
+	msg, err := queue.GetMessage(queueName)
+	return msg, err
 }
 
 func (manager *AnonyQueueManager) SubscribeUserToQueue(user string, queueName string) bool {
