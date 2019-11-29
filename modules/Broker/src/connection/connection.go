@@ -1,6 +1,9 @@
 // TODO: lookup for active queues in the broker and
 // setup the broadcast to every single queue
 
+// TODO: send data from the queue if there's a new user
+
+// TODO: maybe create an engine to make a post when you are into the websocket
 package main
 
 import (
@@ -9,12 +12,24 @@ import (
 	"fmt"
 	"github.com/gorilla/websocket"
 	"log"
+	"math/rand"
 	"message"
 	"net/http"
 	"queueManager"
 	// "strconv"
 	"time"
 )
+
+// useful functions
+const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+func RandStringBytes(n int) string {
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = letterBytes[rand.Intn(len(letterBytes))]
+	}
+	return string(b)
+}
 
 // Data types
 type Broker struct {
@@ -30,6 +45,7 @@ type Host struct {
 
 // Global variables
 var hostList list.List
+var numOfHostsInQueue list.List // store a list o channels
 var numOfHosts chan int = make(chan int)
 var addr = flag.String("addr", "localhost:8082", "http service address")
 var upgrader = websocket.Upgrader{} // use default options
@@ -57,14 +73,31 @@ func (broker Broker) GETandPOST(w http.ResponseWriter, r *http.Request) {
 		fmt.Println(r.Header["Subscriptions"])
 
 		// Verify if we are asking for the websocket upgrade
+		// TODO: verify if the upgrade to websocket exists
+		// in a bigger list of fields
 		if r.Header["Upgrade"][0] == "websocket" {
 			connection := echo(w, r)
 			// TODO: Extract to a host connection function later
 			// TODO: Setup the userID in the Header
-			host := Host{ID: "abc", Connection: connection}
+			host := Host{ID: RandStringBytes(15), Connection: connection}
+			fmt.Println("--------------")
+			// TODO: define if every host can subscribe in every
+			// queue
+			for _, q := range r.Header["Subscriptions"] {
+				fmt.Println("subscribed to:", q)
+				host.Subscriptions.PushBack(q)
+			}
 			hostList.PushBack(host)
-			// Update the number of hosts in the channel
+			// TODO: understand how to make it non blocking or not, don't know
+			// yet
 			numOfHosts <- hostList.Len()
+			// Update the number of hosts in the channel
+			// select {
+			// case numOfHosts <- hostList.Len():
+			// 	fmt.Println("queue size updated")
+			// default:
+			// 	fmt.Println("error updating queue")
+			// }
 		} else {
 			w.Write([]byte("Request Not processed by the server\n"))
 		}
@@ -126,24 +159,23 @@ func echo(w http.ResponseWriter, r *http.Request) *websocket.Conn {
 	return c
 }
 
-func (broker Broker) listenAndBroadcastQueue(name string, c chan int) {
+func (broker Broker) listenAndBroadcastQueue(queue string, c chan int) {
 	hostNum := 0
 	for {
 		select {
 		case data := <-c:
 			hostNum = data
 		default:
+			// TODO: Modify to check the num of hosts for queue other
+			// than the total number of hosts.
 			if hostNum != 0 {
-				message, err := broker.Manager.GetMessageFromQueue(name)
+				message, err := broker.Manager.GetMessageFromQueue(queue)
 				if err != nil {
 					// No messages
 				} else {
 					// TODO: make the broadcast only to the queue
-
-					// TODO: check if there's someone connected before
-					// remove from the queue
 					fmt.Println("Making broadcast")
-					broadcastMessage(message)
+					broadcastMessage(message, queue)
 				}
 			}
 		}
@@ -151,18 +183,32 @@ func (broker Broker) listenAndBroadcastQueue(name string, c chan int) {
 }
 
 // Send a message to all the listenners
-// TODO: modify to broadcast to specific queue
-func broadcastMessage(message string) {
+func broadcastMessage(message string, queue string) {
 	id := 0
+	isMember := false
 	for host := hostList.Front(); host != nil; host = host.Next() {
+		isMember = false
+		// TODO: update this id value
 		id += 1
-		c := host.Value.(Host).Connection
-		err := c.WriteMessage(websocket.TextMessage, []byte(message))
-		if err != nil {
-			log.Println("write:", err)
-			// WARNING: removing from list, check if cause problems in loop
-			hostList.Remove(host)
-			continue
+		subs := host.Value.(Host).Subscriptions
+		// Check if host is subscribed in this queue
+		for el := subs.Front(); el != nil; el = el.Next() {
+			q := el.Value.(string)
+			if q == queue {
+				isMember = true
+				break
+			}
+		}
+		// If registered to the queue then send the message to them
+		if isMember {
+			c := host.Value.(Host).Connection
+			err := c.WriteMessage(websocket.TextMessage, []byte(message))
+			if err != nil {
+				log.Println("write:", err)
+				// WARNING: removing from list, check if cause problems in loop
+				hostList.Remove(host)
+				continue
+			}
 		}
 	}
 }
@@ -176,7 +222,7 @@ func broadcastTimer() {
 		select {
 		case <-ticker.C:
 			// fmt.Println(t)
-			broadcastMessage("tick")
+			broadcastMessage("tick", "kk")
 		}
 	}
 }

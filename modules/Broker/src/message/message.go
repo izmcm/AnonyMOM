@@ -6,6 +6,7 @@ type AnonyMessage struct {
 	Content     string
 }
 
+// not use this
 type CryptedMessage struct {
 	PublicKey string
 	Message   string

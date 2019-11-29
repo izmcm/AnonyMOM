@@ -22,21 +22,21 @@ import (
 
 var addr = flag.String("addr", "localhost:8082", "http service address")
 
-func makePost() {
-	//
-	formData := url.Values{
-		"token":   {"1234567890"},
-		"queue":   {"kk"},
-		"content": {"vai te tomar no olho do cu"},
-	}
+// func makePost() {
+// 	//
+// 	formData := url.Values{
+// 		"token":   {"1234567890"},
+// 		"queue":   {"kk"},
+// 		"content": {"vai te tomar no olho do cu"},
+// 	}
 
-	resp, err := http.PostForm("http://localhost:8082", formData)
-	if err != nil {
-		log.Fatalln(err)
-	}
+// 	resp, err := http.PostForm("http://localhost:8082", formData)
+// 	if err != nil {
+// 		log.Fatalln(err)
+// 	}
 
-	log.Println(resp.Body)
-}
+// 	log.Println(resp.Body)
+// }
 
 func main() {
 	flag.Parse()
@@ -53,7 +53,7 @@ func main() {
 	header.Add("Subscriptions", "kk")
 	header.Add("Subscriptions", "kk1")
 
-	makePost()
+	// makePost()
 
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), header)
 	if err != nil {

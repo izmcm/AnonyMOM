@@ -26,7 +26,7 @@ func makePost() {
 	formData := url.Values{
 		"token":   {"1234567890"},
 		"queue":   {"kk"},
-		"content": {"vai te tomar no olho do cu"},
+		"content": {"vai te tomar no olho do cu biroliro"},
 	}
 
 	resp, err := http.PostForm("http://localhost:8082", formData)
