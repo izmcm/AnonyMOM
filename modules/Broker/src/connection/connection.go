@@ -1,8 +1,7 @@
-// TODO: lookup for active queues in the broker and
-// setup the broadcast to every single queue
-
 // TODO: maybe create an engine to allow the host to make a post when you are
 // into the websocket
+
+// TODO: check for the problem of some messages being lost G_G
 package main
 
 import (
@@ -14,6 +13,7 @@ import (
 	"math/rand"
 	"message"
 	"net/http"
+	"queue"
 	"queueManager"
 	// "strconv"
 	"time"
@@ -49,7 +49,7 @@ var numOfHostsInQueue map[string]int = make(map[string]int)                  // 
 var numOfHosts chan int = make(chan int)
 var addr = flag.String("addr", "localhost:8082", "http service address")
 var upgrader = websocket.Upgrader{} // use default options
-var manager queueManager.AnonyQueueManager = queueManager.AnonyQueueManager{UserPool: make(map[string]int)}
+var manager queueManager.AnonyQueueManager = queueManager.AnonyQueueManager{Pool: make(map[string]queue.AnonyQueue), UserPool: make(map[string]int)}
 var broker Broker = Broker{Broker_id: "0", Manager: manager}
 var runningQueues list.List
 
@@ -74,6 +74,7 @@ func (broker Broker) GETandPOST(w http.ResponseWriter, r *http.Request) {
 		fmt.Println(r.URL)
 		fmt.Println(r.Header)
 		fmt.Println(r.Header["Subscriptions"])
+		fmt.Println(r.Header["token"])
 
 		// Verify if we are asking for the websocket upgrade
 		upgradeToWebsocket := false
@@ -84,19 +85,35 @@ func (broker Broker) GETandPOST(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		// TODO: avoid user to register if the queue doesn't exist
+
 		// if we should upgrade then we upgrade and generate a websocket
 		if upgradeToWebsocket {
 			// TODO: Extract to a host connection function later
 			connection := SetupWebsocketConnection(w, r)
-			// TODO: Setup the userID in the Header
 			host := Host{ID: RandStringBytes(15), Connection: connection}
+			if len(r.Header["token"]) > 0 {
+				host.ID = r.Header["token"][0]
+			}
 			fmt.Println("--------------")
-			// TODO: define if every host can subscribe in every
-			// queue
+			// TODO: make the queue control access at here
 			for _, q := range r.Header["Subscriptions"] {
+
+				// Check if the queue exists before let the user subscribe
+				// to it.
+				_, err := broker.Manager.GetQueueNamed(q)
+				if err != nil {
+					// TODO: insert here something so the user can
+					// know that the queue that he tried to subscribe
+					// doesn't exist at all.
+					fmt.Println("queue named", q, "doesn't exist!")
+					continue
+				}
+
 				fmt.Println("subscribed to:", q)
 				var shouldRun bool = true
 				// TODO: make it faster
+				// Check if there's a specific actor for look at this queue
 				for queueElement := runningQueues.Front(); queueElement != nil && shouldRun; queueElement = queueElement.Next() {
 					if queueElement.Value.(string) == q {
 						fmt.Println("found queue with the same name here")
@@ -125,9 +142,10 @@ func (broker Broker) GETandPOST(w http.ResponseWriter, r *http.Request) {
 			// numOfHosts <- hostList.Len()
 
 			for _, q := range r.Header["Subscriptions"] {
-				fmt.Println(numOfHostsInQueueChannel[q])
-				numOfHostsInQueueChannel[q] <- numOfHostsInQueue[q]
-				fmt.Println()
+				if c, ok := numOfHostsInQueueChannel[q]; ok {
+					c <- numOfHostsInQueue[q]
+					fmt.Println()
+				}
 			}
 		} else {
 			w.Write([]byte("Request Not processed by the server\n"))
@@ -146,8 +164,27 @@ func (broker Broker) GETandPOST(w http.ResponseWriter, r *http.Request) {
 
 		if data["token"] != nil && data["queue"] != nil && data["content"] != nil {
 			message := message.AnonyMessage{SenderToken: data["token"][0], Queue: data["queue"][0], Content: data["content"][0]}
-			broker.Manager.InsertMessageToQueue(message)
-			w.Write([]byte("Data inserted\n"))
+			queue := queue.AnonyQueue{Name: data["queue"][0], Owner: data["token"][0], Type: 1}
+
+			// TODO: remove it from here and create a specific instruction to create the queue
+			_, err := broker.Manager.GetQueueNamed(queue.Name)
+			if err != nil {
+				broker.Manager.RegisterQueue(queue)
+			}
+
+			status, err := broker.Manager.InsertMessageToQueue(message)
+
+			if err != nil {
+				fmt.Println("Error inserting data to queue\n")
+				w.Write([]byte("Error inserting data to queue\n"))
+			} else if status {
+				fmt.Println("Data inserted\n")
+				w.Write([]byte("Data inserted\n"))
+			} else {
+				fmt.Println("You are not allowed to insert data in this queue")
+				w.Write([]byte("You are not allowed to insert data in this queue"))
+			}
+
 		} else {
 			w.Write([]byte("Request Not processed by the server\n"))
 		}

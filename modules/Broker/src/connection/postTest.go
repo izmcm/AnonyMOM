@@ -1,11 +1,3 @@
-// Copyright 2015 The Gorilla WebSocket Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-
-// +build ignore
-
-// https://medium.com/@masnun/making-http-requests-in-golang-dd123379efe7
-
 package main
 
 import (
@@ -63,7 +55,7 @@ func main() {
 
 	// u := url.URL{Scheme: "ws", Host: *addr, Path: "/echo"}
 	log.Printf("making post")
-	for i := 0; i < 30; i++ {
+	for i := 0; i < 20; i++ {
 		makePost()
 	}
 }
