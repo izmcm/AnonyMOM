@@ -51,7 +51,7 @@ func main() {
 
 	header := http.Header{}
 	header.Add("Subscriptions", "kk")
-	header.Add("Subscriptions", "kk1")
+	header.Add("Subscriptions", "novafila")
 
 	// makePost()
 

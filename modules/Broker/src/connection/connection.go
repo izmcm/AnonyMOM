@@ -1,9 +1,8 @@
 // TODO: lookup for active queues in the broker and
 // setup the broadcast to every single queue
 
-// TODO: send data from the queue if there's a new user
-
-// TODO: maybe create an engine to make a post when you are into the websocket
+// TODO: maybe create an engine to allow the host to make a post when you are
+// into the websocket
 package main
 
 import (
@@ -45,10 +44,14 @@ type Host struct {
 
 // Global variables
 var hostList list.List
-var numOfHostsInQueue list.List // store a list o channels
+var numOfHostsInQueueChannel map[string]chan int = make(map[string]chan int) // store a list o channels
+var numOfHostsInQueue map[string]int = make(map[string]int)                  // store a list o channels
 var numOfHosts chan int = make(chan int)
 var addr = flag.String("addr", "localhost:8082", "http service address")
 var upgrader = websocket.Upgrader{} // use default options
+var manager queueManager.AnonyQueueManager = queueManager.AnonyQueueManager{UserPool: make(map[string]int)}
+var broker Broker = Broker{Broker_id: "0", Manager: manager}
+var runningQueues list.List
 
 /**
  * Treats the data from the HTTP request handler
@@ -59,25 +62,32 @@ func (broker Broker) GETandPOST(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	fmt.Println("Received a request")
+
 	switch r.Method {
 	case "GET":
 		// TODO: Setup the data to run into another goroutine
 		// in order to process the request, but for now let's
 		// just do the stuff like if we are in a single goroutine
 		// and fuck this shit!
-
 		fmt.Println(r)
 		fmt.Println(r.URL)
 		fmt.Println(r.Header)
-
 		fmt.Println(r.Header["Subscriptions"])
 
 		// Verify if we are asking for the websocket upgrade
-		// TODO: verify if the upgrade to websocket exists
-		// in a bigger list of fields
-		if r.Header["Upgrade"][0] == "websocket" {
-			connection := echo(w, r)
+		upgradeToWebsocket := false
+		for _, h := range r.Header["Upgrade"] {
+			if h == "websocket" {
+				upgradeToWebsocket = true
+				break
+			}
+		}
+
+		// if we should upgrade then we upgrade and generate a websocket
+		if upgradeToWebsocket {
 			// TODO: Extract to a host connection function later
+			connection := SetupWebsocketConnection(w, r)
 			// TODO: Setup the userID in the Header
 			host := Host{ID: RandStringBytes(15), Connection: connection}
 			fmt.Println("--------------")
@@ -85,19 +95,40 @@ func (broker Broker) GETandPOST(w http.ResponseWriter, r *http.Request) {
 			// queue
 			for _, q := range r.Header["Subscriptions"] {
 				fmt.Println("subscribed to:", q)
+				var shouldRun bool = true
+				// TODO: make it faster
+				for queueElement := runningQueues.Front(); queueElement != nil && shouldRun; queueElement = queueElement.Next() {
+					if queueElement.Value.(string) == q {
+						fmt.Println("found queue with the same name here")
+						fmt.Println("1: ", queueElement.Value.(string))
+						fmt.Println("2: ", q)
+						shouldRun = false
+					}
+				}
+				// If we need start the broker broadcast for this specific queue
+				// TODO: checkup if we should look in the created queues
+				if shouldRun {
+					// Setup a channel for the queue and start a listenner
+					fmt.Println("Registering listenner and channel for queue", q)
+					numOfHostsInQueueChannel[q] = make(chan int)
+					// go broker.listenAndBroadcastQueue(q, numOfHostsInQueueChannel[q])
+					go broker.listenAndBroadcastQueue(q)
+				}
+
 				host.Subscriptions.PushBack(q)
+				// WARNING: checkup if the user has a 0 in the first input
+				fmt.Println("Prev in queue <", q, ">:", numOfHostsInQueue[q])
+				numOfHostsInQueue[q] += 1
+				fmt.Println("Hosts in queue <", q, ">:", numOfHostsInQueue[q])
 			}
 			hostList.PushBack(host)
-			// TODO: understand how to make it non blocking or not, don't know
-			// yet
-			numOfHosts <- hostList.Len()
-			// Update the number of hosts in the channel
-			// select {
-			// case numOfHosts <- hostList.Len():
-			// 	fmt.Println("queue size updated")
-			// default:
-			// 	fmt.Println("error updating queue")
-			// }
+			// numOfHosts <- hostList.Len()
+
+			for _, q := range r.Header["Subscriptions"] {
+				fmt.Println(numOfHostsInQueueChannel[q])
+				numOfHostsInQueueChannel[q] <- numOfHostsInQueue[q]
+				fmt.Println()
+			}
 		} else {
 			w.Write([]byte("Request Not processed by the server\n"))
 		}
@@ -127,54 +158,37 @@ func (broker Broker) GETandPOST(w http.ResponseWriter, r *http.Request) {
 
 }
 
-// make a simple echo server for the websocket service
-func echo(w http.ResponseWriter, r *http.Request) *websocket.Conn {
+// make a simple SetupWebsocketConnection server for the websocket service
+func SetupWebsocketConnection(w http.ResponseWriter, r *http.Request) *websocket.Conn {
 	c, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Print("upgrade:", err)
 		return nil
 	}
-	// defer c.Close()
-	// for {
-	// 	mt, message, err := c.ReadMessage()
-	// 	if err != nil {
-	// 		log.Println("read:", err)
-	// 		break
-	// 	}
-	// 	log.Printf("recv: %s", message)
-	// 	fmt.Println(mt)
-	// 	err = c.WriteMessage(mt, message)
-	// 	// err = c.WriteMessage(mt, []byte("kk bora"))
-	// 	if err != nil {
-	// 		log.Println("write:", err)
-	// 		break
-	// 	}
-	// }
-
-	// connections[c].PushBack()
-	// fmt.Println(c)
 	c.WriteMessage(websocket.TextMessage, []byte("bora dale boy"))
 	c.WriteMessage(websocket.TextMessage, []byte("tais registrado boy!"))
 
 	return c
 }
 
-func (broker Broker) listenAndBroadcastQueue(queue string, c chan int) {
+func (broker Broker) listenAndBroadcastQueue(queue string) {
 	hostNum := 0
+	c := numOfHostsInQueueChannel[queue]
 	for {
 		select {
 		case data := <-c:
 			hostNum = data
 		default:
-			// TODO: Modify to check the num of hosts for queue other
-			// than the total number of hosts.
 			if hostNum != 0 {
 				message, err := broker.Manager.GetMessageFromQueue(queue)
 				if err != nil {
 					// No messages
+					if err.Error() != "Empty queue" {
+						fmt.Println(err)
+					}
 				} else {
-					// TODO: make the broadcast only to the queue
 					fmt.Println("Making broadcast")
+					fmt.Println()
 					broadcastMessage(message, queue)
 				}
 			}
@@ -206,6 +220,8 @@ func broadcastMessage(message string, queue string) {
 			if err != nil {
 				log.Println("write:", err)
 				// WARNING: removing from list, check if cause problems in loop
+				numOfHostsInQueue[queue] -= 1
+				numOfHostsInQueueChannel[queue] <- numOfHostsInQueue[queue]
 				hostList.Remove(host)
 				continue
 			}
@@ -215,6 +231,7 @@ func broadcastMessage(message string, queue string) {
 
 // Setup a timer to broadcast a time based message
 func broadcastTimer() {
+	fmt.Println("Setting up the timer broadcast")
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 
@@ -231,12 +248,14 @@ func main() {
 	flag.Parse()
 	log.SetFlags(0)
 
-	manager := queueManager.AnonyQueueManager{UserPool: make(map[string]int)}
-	broker := Broker{Broker_id: "0", Manager: manager}
+	fmt.Println("Setting up the HTTP Handler")
+
+	// manager := queueManager.AnonyQueueManager{UserPool: make(map[string]int)}
+	// broker := Broker{Broker_id: "0", Manager: manager}
 	http.HandleFunc("/", broker.GETandPOST)
 
-	go broadcastTimer()
-	go broker.listenAndBroadcastQueue("kk", numOfHosts)
+	// go broadcastTimer()
+	// go broker.listenAndBroadcastQueue("kk", numOfHosts)
 
 	// http.ListenAndServe(":3001", nil)
 	http.ListenAndServe(":8082", nil)
