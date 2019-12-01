@@ -22,6 +22,23 @@ func RandStringBytes(n int) string {
 
 var addr = flag.String("addr", "localhost:8082", "http service address")
 
+func Blacklist(token string, queue string, user string) {
+	formData := url.Values{
+		"token":  {token},
+		"queue":  {queue},
+		"List":   {user},
+		"action": {"BlackList"},
+	}
+
+	resp, err := http.PostForm("http://localhost:8082", formData)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	log.Println("response made")
+	log.Println(resp.Body)
+}
+
 func createQueue(token string, queue string, tp int) {
 	typeString := strconv.Itoa(tp)
 	formData := url.Values{
@@ -64,8 +81,13 @@ func main() {
 	log.Printf("Creating queue")
 	createQueue("1234567890", "newqueue", 1)
 
-	log.Printf("making post")
-	for i := 0; i < 30; i++ {
-		insertData("1234567890", "novafila", RandStringBytes(20))
-	}
+	Blacklist("1234567890", "novafila", "pokemon")
+	insertData("1234567890", "novafila", RandStringBytes(20))
+	insertData("pokemon", "novafila", RandStringBytes(20))
+	insertData("1234567890", "novafila", RandStringBytes(20))
+
+	// log.Printf("making post")
+	// for i := 0; i < 30; i++ {
+	// 	insertData("1234567890", "novafila", RandStringBytes(20))
+	// }
 }

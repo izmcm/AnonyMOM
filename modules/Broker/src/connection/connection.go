@@ -1,7 +1,7 @@
 // TODO: maybe create an engine to allow the host to make a post when you are
 // into the websocket
 
-// TODO: check for the problem of some messages being lost G_G
+// TODO: Implement whitelist
 package main
 
 import (
@@ -109,9 +109,6 @@ func (broker Broker) GETandPOST(w http.ResponseWriter, r *http.Request) {
 				}
 
 				// Verify if the user can register in the queue before running it
-				fmt.Println("subscribed to:", queueName)
-				// fmt.Println(host.ID)
-
 				canSub := broker.Manager.CheckUserRights(host.ID, q, 0)
 				if !canSub {
 					queuesNotAllowed.PushBack(queueName)
@@ -119,6 +116,7 @@ func (broker Broker) GETandPOST(w http.ResponseWriter, r *http.Request) {
 					continue
 				}
 
+				fmt.Println("subscribed to:", queueName)
 				var shouldRun bool = true
 
 				// Check if there's a specific actor for look at this queue
@@ -130,18 +128,16 @@ func (broker Broker) GETandPOST(w http.ResponseWriter, r *http.Request) {
 						shouldRun = false
 					}
 				}
+
 				// If we need start the broker broadcast for this specific queue
-				// TODO: checkup if we should look in the created queues
 				if shouldRun {
 					// Setup a channel for the queue and start a listenner
 					fmt.Println("Registering listenner and channel for queue", queueName)
 					numOfHostsInQueueChannel[queueName] = make(chan int)
-					// go broker.listenAndBroadcastQueue(q, numOfHostsInQueueChannel[q])
 					go broker.listenAndBroadcastQueue(queueName)
 				}
 
 				host.Subscriptions.PushBack(queueName)
-				// WARNING: checkup if the user has a 0 in the first input
 				fmt.Println("Prev in queue <", queueName, ">:", numOfHostsInQueue[queueName])
 				numOfHostsInQueue[queueName] += 1
 				fmt.Println("Hosts in queue <", queueName, ">:", numOfHostsInQueue[queueName])
@@ -179,8 +175,8 @@ func (broker Broker) GETandPOST(w http.ResponseWriter, r *http.Request) {
 				w.Write([]byte("Queue Cannot be registered, type not allowed"))
 			} else {
 				queue := queue.AnonyQueue{Name: data["queue"][0], Owner: data["token"][0], Type: tp}
-
 				_, err := broker.Manager.GetQueueNamed(queue.Name)
+
 				if err != nil {
 					broker.Manager.RegisterQueue(&queue)
 					fmt.Println("Queue", queue.Name, "registered for user", queue.Owner)
@@ -209,7 +205,44 @@ func (broker Broker) GETandPOST(w http.ResponseWriter, r *http.Request) {
 				fmt.Println("You are not allowed to insert data in this queue")
 				w.Write([]byte("You are not allowed to insert data in this queue"))
 			}
-		} else {
+		}
+
+		if action == "BlackList" && data["List"] != nil {
+			q, err := broker.Manager.GetQueueNamed(data["queue"][0])
+			if err != nil {
+				fmt.Println("Error blacklisting users\n")
+				w.Write([]byte("Error blacklisting users\n"))
+				return
+			}
+
+			if q.Owner != data["token"][0] {
+				fmt.Println("You don't own this queue\n")
+				fmt.Println("the owner is", q.Owner, "not you,", data["token"][0])
+				w.Write([]byte("You don't own this queue\n"))
+				return
+			}
+
+			if q.Type != 1 {
+				fmt.Println("Queue doesn't support blacklist\n")
+				w.Write([]byte("Queue doesn't support blacklist\n"))
+				return
+			}
+
+			fmt.Println("--------------------")
+			for _, user := range data["List"] {
+				fmt.Println("Blacklisting user", user)
+				q.BlackList.PushBack(user)
+			}
+			fmt.Println("starting serialization")
+			// TODO: new goroutine here
+			q.SerializeQueue()
+			fmt.Println("serialization finished")
+			fmt.Println("--------------------")
+
+		}
+
+		// Request not processed
+		if action == "" {
 			w.Write([]byte("Request Not processed by the server\n"))
 		}
 	default:

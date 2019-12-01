@@ -156,10 +156,8 @@ func (q *AnonyQueue) SerializeQueue() (string, error) {
 		return "Type" + strconv.Itoa(q.Type) + " not allowed", errors.New("Unknown queue Type")
 	}
 
-	// TODO: remove the old metadata before adding any new data
-	// deleteFile("../meta/" + q.Name + ".txt")
-
-	if !fileExists("../database/" + q.Name + ".txt") {
+	// if !fileExists("../database/" + q.Name + ".txt") {
+	if !fileExists("../meta/"+q.Name+".txt") || !fileExists("../database/"+q.Name+".txt") {
 		_, err := os.Create("../database/" + q.Name + ".txt")
 		if err != nil {
 			fmt.Println(err)
@@ -172,43 +170,39 @@ func (q *AnonyQueue) SerializeQueue() (string, error) {
 			return "Erro na criação dos metadados da fila", err
 		}
 
-		fmt.Println(q.Type)
-		metaData := q.Owner + "\n" + strconv.Itoa(q.Type)
-		if q.Type == 1 {
-			metaData = metaData + "\n" + strconv.Itoa(q.BlackList.Len())
-			metaData = metaData + "\n" + strconv.Itoa(q.WritersBlackList.Len())
-
-			for el := q.BlackList.Front(); el != nil; el = el.Next() {
-				token := el.Value.(string)
-				metaData += metaData + "\n" + token
-			}
-
-			for el := q.WritersBlackList.Front(); el != nil; el = el.Next() {
-				token := el.Value.(string)
-				metaData += metaData + "\n" + token
-			}
-		} else if q.Type == 2 {
-			metaData = metaData + "\n" + strconv.Itoa(q.WhiteList.Len())
-			metaData = metaData + "\n" + strconv.Itoa(q.WritersWhiteList.Len())
-
-			for el := q.WhiteList.Front(); el != nil; el = el.Next() {
-				token := el.Value.(string)
-				metaData += metaData + "\n" + token
-			}
-
-			for el := q.WritersWhiteList.Front(); el != nil; el = el.Next() {
-				token := el.Value.(string)
-				metaData += metaData + "\n" + token
-			}
-		}
-		err = ioutil.WriteFile("../meta/"+q.Name+".txt", []byte(metaData), 0644)
-		if err != nil {
-			fmt.Println("File error", err)
-			return "Erro na criação dos metadados da fila", err
-		}
 	} else {
-		err := errors.New("This queue already exists")
-		return "Fila já existente", err
+		// err := errors.New("This queue already exists")
+		// return "Fila já existente", err
+	}
+
+	metaData := q.Owner + "\n" + strconv.Itoa(q.Type)
+	if q.Type == 1 {
+		metaData = metaData + "\n" + strconv.Itoa(q.BlackList.Len())
+		metaData = metaData + "\n" + strconv.Itoa(q.WritersBlackList.Len())
+
+		for el := q.BlackList.Front(); el != nil; el = el.Next() {
+			metaData = metaData + "\n" + el.Value.(string)
+		}
+		for el := q.WritersBlackList.Front(); el != nil; el = el.Next() {
+			metaData = metaData + "\n" + el.Value.(string)
+		}
+	} else if q.Type == 2 {
+		metaData = metaData + "\n" + strconv.Itoa(q.WhiteList.Len())
+		metaData = metaData + "\n" + strconv.Itoa(q.WritersWhiteList.Len())
+
+		for el := q.WhiteList.Front(); el != nil; el = el.Next() {
+			metaData = metaData + "\n" + el.Value.(string)
+		}
+
+		for el := q.WritersWhiteList.Front(); el != nil; el = el.Next() {
+			metaData = metaData + "\n" + el.Value.(string)
+		}
+	}
+
+	err := ioutil.WriteFile("../meta/"+q.Name+".txt", []byte(metaData), 0644)
+	if err != nil {
+		fmt.Println("File error", err)
+		return "Erro na criação dos metadados da fila", err
 	}
 
 	return "Sucesso", nil
@@ -222,28 +216,28 @@ func ReadQueueFromFile(queueName string) (AnonyQueue, error) {
 		return queue, err
 	}
 	sliceData := strings.Split(string(data), "\n")
-	name := sliceData[0]
-	owner := sliceData[1]
-	tp, _ := strconv.Atoi(sliceData[2])
+	name := queueName
+	owner := sliceData[0]
+	tp, _ := strconv.Atoi(sliceData[1])
 
 	queue := AnonyQueue{Name: name, Owner: owner, Type: tp}
 
 	if tp == 1 {
-		blackListSize, _ := strconv.Atoi(sliceData[3])
-		writersBlackListSize, _ := strconv.Atoi(sliceData[4])
-		for i := 5; i < blackListSize; i++ {
+		blackListSize, _ := strconv.Atoi(sliceData[2])
+		writersBlackListSize, _ := strconv.Atoi(sliceData[3])
+		for i := 4; i < blackListSize; i++ {
 			queue.BlackList.PushBack(sliceData[i])
 		}
-		for i := 5 + blackListSize; i < writersBlackListSize; i++ {
+		for i := 4 + blackListSize; i < writersBlackListSize; i++ {
 			queue.WritersBlackList.PushBack(sliceData[i])
 		}
 	} else if tp == 2 {
-		whiteListSize, _ := strconv.Atoi(sliceData[3])
-		writersWhiteListSize, _ := strconv.Atoi(sliceData[4])
-		for i := 5; i < whiteListSize; i++ {
+		whiteListSize, _ := strconv.Atoi(sliceData[2])
+		writersWhiteListSize, _ := strconv.Atoi(sliceData[3])
+		for i := 4; i < whiteListSize; i++ {
 			queue.WhiteList.PushBack(sliceData[i])
 		}
-		for i := 5 + whiteListSize; i < writersWhiteListSize; i++ {
+		for i := 4 + whiteListSize; i < writersWhiteListSize; i++ {
 			queue.WritersWhiteList.PushBack(sliceData[i])
 		}
 	}
