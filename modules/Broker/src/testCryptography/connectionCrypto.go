@@ -1,7 +1,7 @@
 // TODO: maybe create an engine to allow the host to make a post when you are
 // into the websocket
 
-// TODO: Implement whitelist
+// TODO: check for the problem of some messages being lost G_G
 package main
 
 import (
@@ -48,7 +48,7 @@ var hostList list.List
 var numOfHostsInQueueChannel map[string]chan int = make(map[string]chan int) // store a list o channels
 var numOfHostsInQueue map[string]int = make(map[string]int)                  // store a list o channels
 var numOfHosts chan int = make(chan int)
-var addr = flag.String("addr", "localhost:8082", "http service address")
+var addr = flag.String("addr", "localhost:8083", "http service address")
 var upgrader = websocket.Upgrader{} // use default options
 var manager queueManager.AnonyQueueManager = queueManager.AnonyQueueManager{Pool: make(map[string]*queue.AnonyQueue), UserPool: make(map[string]int)}
 var broker Broker = Broker{Broker_id: "0", Manager: manager}
@@ -90,57 +90,51 @@ func (broker Broker) GETandPOST(w http.ResponseWriter, r *http.Request) {
 		if upgradeToWebsocket {
 			var queuesNotAllowed list.List
 
-			// TODO: send to the user it's automatic generated token
 			connection := SetupWebsocketConnection(w, r)
 			host := Host{ID: RandStringBytes(15), Connection: connection}
 			if len(r.Header["token"]) > 0 {
 				host.ID = r.Header["token"][0]
 			}
 			fmt.Println("--------------")
-
-			for _, queueName := range r.Header["Subscriptions"] {
+			// TODO: make the queue control access at here
+			for _, q := range r.Header["Subscriptions"] {
 
 				// Check if the queue exists before let the user subscribe
-				q, err := broker.Manager.GetQueueNamed(queueName)
+				_, err := broker.Manager.GetQueueNamed(q)
 				if err != nil {
-					queuesNotAllowed.PushBack(queueName)
-					fmt.Println("queue named", queueName, "doesn't exist!")
+					queuesNotAllowed.PushBack(q)
+					fmt.Println("queue named", q, "doesn't exist!")
 					continue
 				}
 
-				// Verify if the user can register in the queue before running it
-				canSub := broker.Manager.CheckUserRights(host.ID, q, 0)
-				if !canSub {
-					queuesNotAllowed.PushBack(queueName)
-					fmt.Println("queue named", queueName, "doesn't exist!")
-					continue
-				}
-
-				fmt.Println("subscribed to:", queueName)
+				// TODO: verify if the user can register in the queue before running it
+				fmt.Println("subscribed to:", q)
 				var shouldRun bool = true
 
 				// Check if there's a specific actor for look at this queue
 				for queueElement := runningQueues.Front(); queueElement != nil && shouldRun; queueElement = queueElement.Next() {
-					if queueElement.Value.(string) == queueName {
+					if queueElement.Value.(string) == q {
 						fmt.Println("found queue with the same name here")
 						fmt.Println("1: ", queueElement.Value.(string))
-						fmt.Println("2: ", queueName)
+						fmt.Println("2: ", q)
 						shouldRun = false
 					}
 				}
-
 				// If we need start the broker broadcast for this specific queue
+				// TODO: checkup if we should look in the created queues
 				if shouldRun {
 					// Setup a channel for the queue and start a listenner
-					fmt.Println("Registering listenner and channel for queue", queueName)
-					numOfHostsInQueueChannel[queueName] = make(chan int)
-					go broker.listenAndBroadcastQueue(queueName)
+					fmt.Println("Registering listenner and channel for queue", q)
+					numOfHostsInQueueChannel[q] = make(chan int)
+					// go broker.listenAndBroadcastQueue(q, numOfHostsInQueueChannel[q])
+					go broker.listenAndBroadcastQueue(q)
 				}
 
-				host.Subscriptions.PushBack(queueName)
-				fmt.Println("Prev in queue <", queueName, ">:", numOfHostsInQueue[queueName])
-				numOfHostsInQueue[queueName] += 1
-				fmt.Println("Hosts in queue <", queueName, ">:", numOfHostsInQueue[queueName])
+				host.Subscriptions.PushBack(q)
+				// WARNING: checkup if the user has a 0 in the first input
+				fmt.Println("Prev in queue <", q, ">:", numOfHostsInQueue[q])
+				numOfHostsInQueue[q] += 1
+				fmt.Println("Hosts in queue <", q, ">:", numOfHostsInQueue[q])
 			}
 			hostList.PushBack(host)
 			for _, q := range r.Header["Subscriptions"] {
@@ -174,10 +168,9 @@ func (broker Broker) GETandPOST(w http.ResponseWriter, r *http.Request) {
 				fmt.Println("Type", tp, "not allowed")
 				w.Write([]byte("Queue Cannot be registered, type not allowed"))
 			} else {
-				// queue := queue.AnonyQueue{Name: data["queue"][0], Owner: data["token"][0], Type: tp}
-				queue := queue.New(data["queue"][0], data["token"][0], tp, 0)
-				_, err := broker.Manager.GetQueueNamed(queue.Name)
+				queue := queue.AnonyQueue{Name: data["queue"][0], Owner: data["token"][0], Type: tp}
 
+				_, err := broker.Manager.GetQueueNamed(queue.Name)
 				if err != nil {
 					broker.Manager.RegisterQueue(&queue)
 					fmt.Println("Queue", queue.Name, "registered for user", queue.Owner)
@@ -206,44 +199,7 @@ func (broker Broker) GETandPOST(w http.ResponseWriter, r *http.Request) {
 				fmt.Println("You are not allowed to insert data in this queue")
 				w.Write([]byte("You are not allowed to insert data in this queue"))
 			}
-		}
-
-		if action == "BlackList" && data["List"] != nil {
-			q, err := broker.Manager.GetQueueNamed(data["queue"][0])
-			if err != nil {
-				fmt.Println("Error blacklisting users\n")
-				w.Write([]byte("Error blacklisting users\n"))
-				return
-			}
-
-			if q.Owner != data["token"][0] {
-				fmt.Println("You don't own this queue\n")
-				fmt.Println("the owner is", q.Owner, "not you,", data["token"][0])
-				w.Write([]byte("You don't own this queue\n"))
-				return
-			}
-
-			if q.Type != 1 {
-				fmt.Println("Queue doesn't support blacklist\n")
-				w.Write([]byte("Queue doesn't support blacklist\n"))
-				return
-			}
-
-			fmt.Println("--------------------")
-			for _, user := range data["List"] {
-				fmt.Println("Blacklisting user", user)
-				q.BlackList.PushBack(user)
-			}
-			fmt.Println("starting serialization")
-			// TODO: new goroutine here
-			q.SerializeQueue()
-			fmt.Println("serialization finished")
-			fmt.Println("--------------------")
-
-		}
-
-		// Request not processed
-		if action == "" {
+		} else {
 			w.Write([]byte("Request Not processed by the server\n"))
 		}
 	default:
@@ -363,6 +319,6 @@ func main() {
 	// go broker.listenAndBroadcastQueue("kk", numOfHosts)
 
 	// http.ListenAndServe(":3001", nil)
-	http.ListenAndServe(":8082", nil)
+	http.ListenAndServe(":8084", nil)
 	log.Fatal(http.ListenAndServe(*addr, nil))
 }
