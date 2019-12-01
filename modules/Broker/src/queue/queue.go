@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Metadata about a specific queue
@@ -30,7 +31,8 @@ type AnonyQueue struct {
 	WritersWhiteList list.List
 	WritersBlackList list.List
 	Mux              *sync.Mutex
-	Throughput       int
+	Throughput       int64
+	LastHit          time.Time
 }
 
 func fileExists(filename string) bool {
@@ -41,8 +43,8 @@ func fileExists(filename string) bool {
 	return !info.IsDir()
 }
 
-func New(name string, owner string, tp int, throughput int) AnonyQueue {
-	return AnonyQueue{Name: name, Owner: owner, Type: tp, Throughput: throughput}
+func New(name string, owner string, tp int, throughput int64) AnonyQueue {
+	return AnonyQueue{Name: name, Owner: owner, Type: tp, Throughput: throughput, LastHit: time.Now()}
 }
 
 func deleteFile(path string) error {
@@ -218,7 +220,7 @@ func ReadQueueFromFile(queueName string) (AnonyQueue, error) {
 	data, err := ioutil.ReadFile("../meta/" + queueName + ".txt")
 	if err != nil {
 		// queue := AnonyQueue{Name: "", Owner: "", Type: -1}
-		queue := AnonyQueue.New("", "", -1, 0)
+		queue := New("", "", -1, 0)
 		return queue, err
 	}
 	sliceData := strings.Split(string(data), "\n")
@@ -227,7 +229,7 @@ func ReadQueueFromFile(queueName string) (AnonyQueue, error) {
 	tp, _ := strconv.Atoi(sliceData[1])
 
 	// queue := AnonyQueue{Name: name, Owner: owner, Type: tp}
-	queue := AnonyQueue.New(name, owner, tp, 0)
+	queue := New(name, owner, tp, 0)
 
 	if tp == 1 {
 		blackListSize, _ := strconv.Atoi(sliceData[2])

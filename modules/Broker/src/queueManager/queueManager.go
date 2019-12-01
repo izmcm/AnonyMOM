@@ -10,6 +10,7 @@ import (
 	"queue"
 	"strings"
 	"sync"
+	"time"
 )
 
 // TODO: Setup the type queue so we can define metadata about it such as if the
@@ -49,9 +50,11 @@ func (manager *AnonyQueueManager) InsertMessageToQueue(msg message.AnonyMessage)
 
 	// check if the user can write in this queue
 	canWrite := manager.CheckUserRights(msg.SenderToken, q, WRITE_OPERATION)
+	canGo := time.Now().Sub(q.LastHit).Nanoseconds()/1000 > q.Throughput
 
-	if canWrite {
+	if canWrite && canGo {
 		err, ok := manager.PushMessageToQueue(msg)
+		q.LastHit = time.Now()
 		return ok, err
 	}
 
@@ -184,12 +187,12 @@ func (manager *AnonyQueueManager) GetQueueNamed(queueName string) (*queue.AnonyQ
 	return queue, nil
 }
 
-func ContainsString(lst list.List, value string) bool {
+func ContainsString(lst *list.List, value string) bool {
 	isIn := false
-	for el := lst.Front(); el != nil && !isIn; el.Next() {
-		val := el.Value.(string)
-		if value == val {
-			isIn = false
+	for el := lst.Front(); el != nil; el = el.Next() {
+		if value == el.Value.(string) {
+			isIn = true
+			break
 		}
 	}
 	return isIn
@@ -202,15 +205,15 @@ func (manager *AnonyQueueManager) CheckUserRights(userToken string, q *queue.Ano
 	allow := true
 	if operation == 0 {
 		if q.Type == 1 {
-			allow = !ContainsString(q.BlackList, userToken)
+			allow = !ContainsString(&q.BlackList, userToken)
 		} else if q.Type == 2 {
-			allow = ContainsString(q.WhiteList, userToken)
+			allow = ContainsString(&q.WhiteList, userToken)
 		}
 	} else if operation == 1 {
 		if q.Type == 1 {
-			allow = !ContainsString(q.WritersBlackList, userToken)
+			allow = !ContainsString(&q.BlackList, userToken) && !ContainsString(&q.WritersBlackList, userToken)
 		} else if q.Type == 2 {
-			allow = ContainsString(q.WritersWhiteList, userToken)
+			allow = ContainsString(&q.WhiteList, userToken) && ContainsString(&q.WritersWhiteList, userToken)
 		}
 	}
 
