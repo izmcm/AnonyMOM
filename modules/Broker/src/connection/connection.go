@@ -13,9 +13,10 @@ import (
 	"math/rand"
 	"message"
 	"net/http"
+	"net/url"
 	"queue"
 	"queueManager"
-	// "strconv"
+	"strconv"
 	"time"
 )
 
@@ -85,40 +86,47 @@ func (broker Broker) GETandPOST(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		// TODO: avoid user to register if the queue doesn't exist
-
 		// if we should upgrade then we upgrade and generate a websocket
 		if upgradeToWebsocket {
-			// TODO: Extract to a host connection function later
+			var queuesNotAllowed list.List
+
+			// TODO: send to the user it's automatic generated token
 			connection := SetupWebsocketConnection(w, r)
 			host := Host{ID: RandStringBytes(15), Connection: connection}
 			if len(r.Header["token"]) > 0 {
 				host.ID = r.Header["token"][0]
 			}
 			fmt.Println("--------------")
-			// TODO: make the queue control access at here
-			for _, q := range r.Header["Subscriptions"] {
+
+			for _, queueName := range r.Header["Subscriptions"] {
 
 				// Check if the queue exists before let the user subscribe
-				// to it.
-				_, err := broker.Manager.GetQueueNamed(q)
+				q, err := broker.Manager.GetQueueNamed(queueName)
 				if err != nil {
-					// TODO: insert here something so the user can
-					// know that the queue that he tried to subscribe
-					// doesn't exist at all.
-					fmt.Println("queue named", q, "doesn't exist!")
+					queuesNotAllowed.PushBack(queueName)
+					fmt.Println("queue named", queueName, "doesn't exist!")
 					continue
 				}
 
-				fmt.Println("subscribed to:", q)
+				// Verify if the user can register in the queue before running it
+				fmt.Println("subscribed to:", queueName)
+				// fmt.Println(host.ID)
+
+				canSub := broker.Manager.CheckUserRights(host.ID, q, 0)
+				if !canSub {
+					queuesNotAllowed.PushBack(queueName)
+					fmt.Println("queue named", queueName, "doesn't exist!")
+					continue
+				}
+
 				var shouldRun bool = true
-				// TODO: make it faster
+
 				// Check if there's a specific actor for look at this queue
 				for queueElement := runningQueues.Front(); queueElement != nil && shouldRun; queueElement = queueElement.Next() {
-					if queueElement.Value.(string) == q {
+					if queueElement.Value.(string) == queueName {
 						fmt.Println("found queue with the same name here")
 						fmt.Println("1: ", queueElement.Value.(string))
-						fmt.Println("2: ", q)
+						fmt.Println("2: ", queueName)
 						shouldRun = false
 					}
 				}
@@ -126,21 +134,19 @@ func (broker Broker) GETandPOST(w http.ResponseWriter, r *http.Request) {
 				// TODO: checkup if we should look in the created queues
 				if shouldRun {
 					// Setup a channel for the queue and start a listenner
-					fmt.Println("Registering listenner and channel for queue", q)
-					numOfHostsInQueueChannel[q] = make(chan int)
+					fmt.Println("Registering listenner and channel for queue", queueName)
+					numOfHostsInQueueChannel[queueName] = make(chan int)
 					// go broker.listenAndBroadcastQueue(q, numOfHostsInQueueChannel[q])
-					go broker.listenAndBroadcastQueue(q)
+					go broker.listenAndBroadcastQueue(queueName)
 				}
 
-				host.Subscriptions.PushBack(q)
+				host.Subscriptions.PushBack(queueName)
 				// WARNING: checkup if the user has a 0 in the first input
-				fmt.Println("Prev in queue <", q, ">:", numOfHostsInQueue[q])
-				numOfHostsInQueue[q] += 1
-				fmt.Println("Hosts in queue <", q, ">:", numOfHostsInQueue[q])
+				fmt.Println("Prev in queue <", queueName, ">:", numOfHostsInQueue[queueName])
+				numOfHostsInQueue[queueName] += 1
+				fmt.Println("Hosts in queue <", queueName, ">:", numOfHostsInQueue[queueName])
 			}
 			hostList.PushBack(host)
-			// numOfHosts <- hostList.Len()
-
 			for _, q := range r.Header["Subscriptions"] {
 				if c, ok := numOfHostsInQueueChannel[q]; ok {
 					c <- numOfHostsInQueue[q]
@@ -151,8 +157,6 @@ func (broker Broker) GETandPOST(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte("Request Not processed by the server\n"))
 		}
 	case "POST":
-		// TODO: verify who can put data in which channel before just
-		// allowing the users to insert any data, but for now, fuck you!
 		err := r.ParseForm()
 		if err != nil {
 			panic(err)
@@ -162,16 +166,37 @@ func (broker Broker) GETandPOST(w http.ResponseWriter, r *http.Request) {
 		fmt.Println(data)
 		fmt.Println("")
 
-		if data["token"] != nil && data["queue"] != nil && data["content"] != nil {
-			message := message.AnonyMessage{SenderToken: data["token"][0], Queue: data["queue"][0], Content: data["content"][0]}
-			queue := queue.AnonyQueue{Name: data["queue"][0], Owner: data["token"][0], Type: 1}
+		// Check if it's a valid action
+		action := SelectAction(data)
 
-			// TODO: remove it from here and create a specific instruction to create the queue
-			_, err := broker.Manager.GetQueueNamed(queue.Name)
+		//-------------------------------------------------
+		// Create a new queue
+		//-------------------------------------------------
+		if action == "CreateQueue" && data["type"] != nil {
+			tp, err := strconv.Atoi(data["type"][0])
 			if err != nil {
-				broker.Manager.RegisterQueue(&queue)
-			}
+				fmt.Println("Type", tp, "not allowed")
+				w.Write([]byte("Queue Cannot be registered, type not allowed"))
+			} else {
+				queue := queue.AnonyQueue{Name: data["queue"][0], Owner: data["token"][0], Type: tp}
 
+				_, err := broker.Manager.GetQueueNamed(queue.Name)
+				if err != nil {
+					broker.Manager.RegisterQueue(&queue)
+					fmt.Println("Queue", queue.Name, "registered for user", queue.Owner)
+					w.Write([]byte("Queue Registered"))
+				} else {
+					fmt.Println("Queue", queue.Name, "cannot be registered for user", queue.Owner)
+					w.Write([]byte("Queue Cannot be registered"))
+				}
+			}
+		}
+
+		//-------------------------------------------------
+		// Insert a message into a queue
+		//-------------------------------------------------
+		if action == "InsertData" && data["content"] != nil {
+			message := message.AnonyMessage{SenderToken: data["token"][0], Queue: data["queue"][0], Content: data["content"][0]}
 			status, err := broker.Manager.InsertMessageToQueue(message)
 
 			if err != nil {
@@ -191,7 +216,17 @@ func (broker Broker) GETandPOST(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotImplemented)
 		w.Write([]byte(http.StatusText(http.StatusNotImplemented)))
 	}
+}
 
+// Select the action that the user wants to do
+func SelectAction(data url.Values) string {
+	action := ""
+
+	if data["action"] != nil && data["token"] != nil && data["queue"] != nil {
+		action = data["action"][0]
+	}
+
+	return action
 }
 
 // make a simple SetupWebsocketConnection server for the websocket service
