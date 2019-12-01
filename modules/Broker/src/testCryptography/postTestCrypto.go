@@ -56,9 +56,10 @@ func makePost() {
 			"action":  {"InsertData"},
 		}
 		//envia a menssagem
-		resp, err := http.PostForm("http://localhost:8083", formData)
+		resp, err := http.PostForm("http://localhost:8084", formData)
 		if err != nil {
 			log.Fatalln(err)
+			log.Printf("aqui fudeo")
 		}
 
 		log.Println("response made")
@@ -75,7 +76,7 @@ func createQueue(token string, queue string, tp int) {
 		"action": {"CreateQueue"},
 	}
 
-	resp, err := http.PostForm("http://localhost:8083", formData)
+	resp, err := http.PostForm("http://localhost:8084", formData)
 	if err != nil {
 		log.Fatalln(err)
 	}
