@@ -2,10 +2,14 @@ package queueManager
 
 import (
 	"container/list"
-	// "errors"
+	"errors"
+	"fmt"
+	"io/ioutil"
 	"message"
+	"os"
 	"queue"
-	// "strconv"
+	"strings"
+	"sync"
 )
 
 // TODO: Setup the type queue so we can define metadata about it such as if the
@@ -14,7 +18,7 @@ import (
 // a public queue and anyone can write into it.
 
 type AnonyQueueManager struct {
-	Pool     map[string]queue.AnonyQueue
+	Pool     map[string]*queue.AnonyQueue
 	UserPool map[string]int
 }
 
@@ -22,9 +26,12 @@ type AnonyQueueManager struct {
 const READ_OPERATION int = 1
 const WRITE_OPERATION int = 1
 
-func (manager *AnonyQueueManager) RegisterQueue(meta queue.AnonyQueue) (bool, error) {
+func (manager *AnonyQueueManager) RegisterQueue(meta *queue.AnonyQueue) (bool, error) {
 	_, err := meta.SerializeQueue()
 	// _, err := meta.CreateQueue()
+	if meta.Mux == nil {
+		meta.Mux = &sync.Mutex{}
+	}
 	manager.Pool[meta.Name] = meta
 
 	if err != nil {
@@ -44,39 +51,97 @@ func (manager *AnonyQueueManager) InsertMessageToQueue(msg message.AnonyMessage)
 	canWrite := manager.CheckUserRights(msg.SenderToken, q, WRITE_OPERATION)
 
 	if canWrite {
-		err, ok := queue.PushMessageToQueue(msg)
+		err, ok := manager.PushMessageToQueue(msg)
 		return ok, err
 	}
 
 	return false, nil
 }
 
-// func (manager *AnonyQueueManager) GetMessageFromQueue(queueName string, userToken string) (string, error) {
-// 	q, err := manager.GetQueueNamed(queueName)
-// 	if err != nil {
-// 		return "", err
-// 	}
+func (manager *AnonyQueueManager) PushMessageToQueue(msg message.AnonyMessage) (error, bool) {
+	// lock queue mutex
+	q, err := manager.GetQueueNamed(msg.Queue)
+	if err != nil {
+		return err, false
+	}
 
-// 	// check if the user can write in this queue
-// 	canRead := manager.CheckUserRights(userToken, q, READ_OPERATION)
+	// addr := &q.Mux
+	// fmt.Printf("push: %p\n", addr)
+	q.Mux.Lock()
 
-// 	if canRead {
-// 		msg, err := queue.GetMessage(queueName)
-// 		return msg, err
-// 	}
+	f, err := os.OpenFile("../database/"+msg.Queue+".txt", os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Println(err)
+		return err, false
+	}
 
-// 	// TODO: check if the user has the possibility to read from this queue
-// 	return "", errors.New("User not authorized to read from the queue")
-// }
+	newLine := msg.SenderToken + ";" + msg.Content
+	_, err = fmt.Fprintln(f, newLine)
+
+	// unlock queue mutex
+	q.Mux.Unlock()
+
+	if err != nil {
+		fmt.Println(err)
+		f.Close()
+		return err, false
+	}
+
+	err = f.Close()
+	if err != nil {
+		fmt.Println(err)
+		return err, false
+	}
+
+	return nil, true
+}
 
 func (manager *AnonyQueueManager) GetMessageFromQueue(queueName string) (string, error) {
-	_, err := manager.GetQueueNamed(queueName)
+	// _, err := manager.GetQueueNamed(queueName)
+	// if err != nil {
+	// 	return "", err
+	// }
+
+	msg, err := manager.GetMessage(queueName)
+	return msg, err
+}
+
+func (manager *AnonyQueueManager) GetMessage(name string) (string, error) {
+	// lock queue mutex
+	q, err := manager.GetQueueNamed(name)
 	if err != nil {
 		return "", err
 	}
 
-	msg, err := queue.GetMessage(queueName)
-	return msg, err
+	// addr := &q.Mux
+	// fmt.Printf("get: %p\n", addr)
+	q.Mux.Lock()
+
+	data, err := ioutil.ReadFile("../database/" + name + ".txt")
+	if err != nil {
+		fmt.Println("File reading error", err)
+		return "", err
+	}
+	sliceData := strings.Split(string(data), "\n")
+	msg := sliceData[0]
+
+	totalData := strings.Join(sliceData[1:], "\n")
+	err = ioutil.WriteFile("../database/"+name+".txt", []byte(totalData), 0644)
+
+	// unlock queue mutex
+	q.Mux.Unlock()
+
+	if err != nil {
+		fmt.Println("File reading error", err)
+		return "", err
+	}
+
+	if msg == "" {
+		err := errors.New("Empty queue")
+		return msg, err
+	}
+
+	return msg, nil
 }
 
 func (manager *AnonyQueueManager) SubscribeUserToQueue(user string, queueName string) bool {
@@ -97,16 +162,25 @@ func (manager *AnonyQueueManager) UnsubscribeUserToQueue(user string, queueName 
 	return true
 }
 
-func (manager *AnonyQueueManager) GetQueueNamed(queueName string) (queue.AnonyQueue, error) {
+func (manager *AnonyQueueManager) GetQueueNamed(queueName string) (*queue.AnonyQueue, error) {
+	// already should have a mutex
 	if queue, ok := manager.Pool[queueName]; ok {
+		if queue.Mux == nil {
+			queue.Mux = &sync.Mutex{}
+		}
 		return queue, nil
 	}
 
-	queue, err := queue.ReadQueueFromFile(queueName)
+	// must create a new mutex
+	q, err := queue.ReadQueueFromFile(queueName)
+	queue := &q
 	if err != nil {
 		return queue, err
 	}
 
+	// WARNING: colateral effect
+	queue.Mux = &sync.Mutex{}
+	manager.Pool[queueName] = queue
 	return queue, nil
 }
 
@@ -124,7 +198,7 @@ func ContainsString(lst list.List, value string) bool {
 // Operation:
 // 0 - read
 // 1 - write
-func (manager *AnonyQueueManager) CheckUserRights(userToken string, q queue.AnonyQueue, operation int) bool {
+func (manager *AnonyQueueManager) CheckUserRights(userToken string, q *queue.AnonyQueue, operation int) bool {
 	allow := true
 	if operation == 0 {
 		if q.Type == 1 {

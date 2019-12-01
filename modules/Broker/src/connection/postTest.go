@@ -6,10 +6,6 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
-	// 	"os"
-	// 	"os/signal"
-	// 	"time"
-	// 	"github.com/gorilla/websocket"
 )
 
 // useful functions
@@ -26,6 +22,7 @@ func RandStringBytes(n int) string {
 var addr = flag.String("addr", "localhost:8082", "http service address")
 
 func makePost() {
+
 	// 	formData := url.Values{
 	// 		"token":   {"1234567890"},
 	// 		"queue":   {"kk"},
@@ -55,7 +52,7 @@ func main() {
 
 	// u := url.URL{Scheme: "ws", Host: *addr, Path: "/echo"}
 	log.Printf("making post")
-	for i := 0; i < 20; i++ {
+	for i := 0; i < 30; i++ {
 		makePost()
 	}
 }

@@ -50,7 +50,7 @@ func main() {
 	log.Printf("connecting to %s", u.String())
 
 	header := http.Header{}
-	header.Add("Subscriptions", "kk")
+	// header.Add("Subscriptions", "kk")
 	header.Add("Subscriptions", "novafila")
 
 	// makePost()

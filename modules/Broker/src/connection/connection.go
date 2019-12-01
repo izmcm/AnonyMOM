@@ -49,7 +49,7 @@ var numOfHostsInQueue map[string]int = make(map[string]int)                  // 
 var numOfHosts chan int = make(chan int)
 var addr = flag.String("addr", "localhost:8082", "http service address")
 var upgrader = websocket.Upgrader{} // use default options
-var manager queueManager.AnonyQueueManager = queueManager.AnonyQueueManager{Pool: make(map[string]queue.AnonyQueue), UserPool: make(map[string]int)}
+var manager queueManager.AnonyQueueManager = queueManager.AnonyQueueManager{Pool: make(map[string]*queue.AnonyQueue), UserPool: make(map[string]int)}
 var broker Broker = Broker{Broker_id: "0", Manager: manager}
 var runningQueues list.List
 
@@ -169,7 +169,7 @@ func (broker Broker) GETandPOST(w http.ResponseWriter, r *http.Request) {
 			// TODO: remove it from here and create a specific instruction to create the queue
 			_, err := broker.Manager.GetQueueNamed(queue.Name)
 			if err != nil {
-				broker.Manager.RegisterQueue(queue)
+				broker.Manager.RegisterQueue(&queue)
 			}
 
 			status, err := broker.Manager.InsertMessageToQueue(message)
@@ -184,7 +184,6 @@ func (broker Broker) GETandPOST(w http.ResponseWriter, r *http.Request) {
 				fmt.Println("You are not allowed to insert data in this queue")
 				w.Write([]byte("You are not allowed to insert data in this queue"))
 			}
-
 		} else {
 			w.Write([]byte("Request Not processed by the server\n"))
 		}

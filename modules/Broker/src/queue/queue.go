@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"message"
+	// "message"
 	"os"
+	// "queueManager"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // Metadata about a specific queue
@@ -27,6 +29,7 @@ type AnonyQueue struct {
 	BlackList        list.List
 	WritersWhiteList list.List
 	WritersBlackList list.List
+	Mux              *sync.Mutex
 }
 
 func fileExists(filename string) bool {
@@ -47,53 +50,67 @@ func deleteFile(path string) error {
 	return nil
 }
 
-func PushMessageToQueue(msg message.AnonyMessage) (error, bool) {
-	f, err := os.OpenFile("../database/"+msg.Queue+".txt", os.O_APPEND|os.O_WRONLY, 0644)
-	if err != nil {
-		fmt.Println(err)
-		return err, false
-	}
+// func PushMessageToQueue(msg message.AnonyMessage) (error, bool) {
+// 	// lock queue mutex
+// 	queue := queueManager.GetQueueNamed(msg.Queue)
+// 	queue.mux.lock()
 
-	newLine := msg.SenderToken + ";" + msg.Content
-	_, err = fmt.Fprintln(f, newLine)
-	if err != nil {
-		fmt.Println(err)
-		f.Close()
-		return err, false
-	}
+// 	f, err := os.OpenFile("../database/"+msg.Queue+".txt", os.O_APPEND|os.O_WRONLY, 0644)
+// 	if err != nil {
+// 		fmt.Println(err)
+// 		return err, false
+// 	}
 
-	err = f.Close()
-	if err != nil {
-		fmt.Println(err)
-		return err, false
-	}
+// 	newLine := msg.SenderToken + ";" + msg.Content
+// 	_, err = fmt.Fprintln(f, newLine)
+// 	if err != nil {
+// 		fmt.Println(err)
+// 		f.Close()
+// 		return err, false
+// 	}
 
-	return nil, true
-}
+// 	err = f.Close()
+// 	if err != nil {
+// 		fmt.Println(err)
+// 		return err, false
+// 	}
 
-func GetMessage(name string) (string, error) {
-	data, err := ioutil.ReadFile("../database/" + name + ".txt")
-	if err != nil {
-		fmt.Println("File reading error", err)
-		return "", err
-	}
-	sliceData := strings.Split(string(data), "\n")
-	msg := sliceData[0]
+// 	return nil, true
 
-	totalData := strings.Join(sliceData[1:], "\n")
-	err = ioutil.WriteFile("../database/"+name+".txt", []byte(totalData), 0644)
-	if err != nil {
-		fmt.Println("File reading error", err)
-		return "", err
-	}
+// 	// unlock queue mutex
+// 	queue.mux.unlock()
+// }
 
-	if msg == "" {
-		err := errors.New("Empty queue")
-		return msg, err
-	}
+// func GetMessage(name string) (string, error) {
+// 	// lock queue mutex
+// 	queue := queueManager.GetQueueNamed(name)
+// 	queue.mux.lock()
 
-	return msg, nil
-}
+// 	data, err := ioutil.ReadFile("../database/" + name + ".txt")
+// 	if err != nil {
+// 		fmt.Println("File reading error", err)
+// 		return "", err
+// 	}
+// 	sliceData := strings.Split(string(data), "\n")
+// 	msg := sliceData[0]
+
+// 	totalData := strings.Join(sliceData[1:], "\n")
+// 	err = ioutil.WriteFile("../database/"+name+".txt", []byte(totalData), 0644)
+// 	if err != nil {
+// 		fmt.Println("File reading error", err)
+// 		return "", err
+// 	}
+
+// 	// unlock queue mutex
+// 	queue.mux.unlock()
+
+// 	if msg == "" {
+// 		err := errors.New("Empty queue")
+// 		return msg, err
+// 	}
+
+// 	return msg, nil
+// }
 
 // TODO: implement the system to make the queue persist it's metadata
 // func CreateQueue(name string, owner string, queueType string) (string, error) {
