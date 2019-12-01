@@ -17,6 +17,7 @@ import (
 	"queue"
 	"queueManager"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -321,7 +322,18 @@ func broadcastMessage(message string, queue string) {
 		// If registered to the queue then send the message to them
 		if isMember {
 			c := host.Value.(Host).Connection
-			err := c.WriteMessage(websocket.TextMessage, []byte(message))
+
+			newMessageBytes := []byte(message)
+			// set maximum TCP network packet size (1460 bytes)
+			bytesSize := len([]byte(message))
+			if bytesSize < 1460 {
+				trash := strings.Repeat("0", 1459-bytesSize)
+				newMessage := message + ";" + trash
+				newMessageBytes = []byte(newMessage)
+			}
+
+			err := c.WriteMessage(websocket.TextMessage, newMessageBytes)
+
 			if err != nil {
 				log.Println("write:", err)
 				// WARNING: removing from list, check if cause problems in loop
