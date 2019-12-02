@@ -67,14 +67,14 @@ func (queue *AnonyQueue) CreateQueue() (string, error) {
 	if queueType != "2" && queueType != "1" {
 		return "", errors.New("Unknown queue Type")
 	}
-	if !fileExists("../database/" + name + ".txt") {
-		_, err := os.Create("../database/" + name + ".txt")
+	if !fileExists("./database/" + name + ".txt") {
+		_, err := os.Create("./database/" + name + ".txt")
 		if err != nil {
 			fmt.Println(err)
 			return "Erro na criação da fila", err
 		}
 
-		_, err = os.Create("../meta/" + name + ".txt")
+		_, err = os.Create("./meta/" + name + ".txt")
 		if err != nil {
 			fmt.Println(err)
 			return "Erro na criação dos metadados da fila", err
@@ -82,7 +82,7 @@ func (queue *AnonyQueue) CreateQueue() (string, error) {
 
 		fmt.Println(queueType)
 		metaData := owner + "\n" + queueType
-		err = ioutil.WriteFile("../meta/"+name+".txt", []byte(metaData), 0644)
+		err = ioutil.WriteFile("./meta/"+name+".txt", []byte(metaData), 0644)
 		if err != nil {
 			fmt.Println("File error", err)
 			return "Erro na criação dos metadados da fila", err
@@ -101,15 +101,15 @@ func (q *AnonyQueue) SerializeQueue() (string, error) {
 		return "Type" + strconv.Itoa(q.Type) + " not allowed", errors.New("Unknown queue Type")
 	}
 
-	// if !fileExists("../database/" + q.Name + ".txt") {
-	if !fileExists("../meta/"+q.Name+".txt") || !fileExists("../database/"+q.Name+".txt") {
-		_, err := os.Create("../database/" + q.Name + ".txt")
+	// if !fileExists("./database/" + q.Name + ".txt") {
+	if !fileExists("./meta/"+q.Name+".txt") || !fileExists("./database/"+q.Name+".txt") {
+		_, err := os.Create("./database/" + q.Name + ".txt")
 		if err != nil {
 			fmt.Println(err)
 			return "Erro na criação da fila", err
 		}
 
-		_, err = os.Create("../meta/" + q.Name + ".txt")
+		_, err = os.Create("./meta/" + q.Name + ".txt")
 		if err != nil {
 			fmt.Println(err)
 			return "Erro na criação dos metadados da fila", err
@@ -144,7 +144,7 @@ func (q *AnonyQueue) SerializeQueue() (string, error) {
 		}
 	}
 
-	err := ioutil.WriteFile("../meta/"+q.Name+".txt", []byte(metaData), 0644)
+	err := ioutil.WriteFile("./meta/"+q.Name+".txt", []byte(metaData), 0644)
 	if err != nil {
 		fmt.Println("File error", err)
 		return "Erro na criação dos metadados da fila", err
@@ -155,7 +155,7 @@ func (q *AnonyQueue) SerializeQueue() (string, error) {
 
 func ReadQueueFromFile(queueName string) (AnonyQueue, error) {
 	// Split the data by lines
-	data, err := ioutil.ReadFile("../meta/" + queueName + ".txt")
+	data, err := ioutil.ReadFile("./meta/" + queueName + ".txt")
 	if err != nil {
 		// queue := AnonyQueue{Name: "", Owner: "", Type: -1}
 		queue := New("", "", -1, 0)

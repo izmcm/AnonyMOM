@@ -36,7 +36,9 @@ func makePost() {
 		"content": {"vai te tomar no olho do cu biroliro"}, //tentando isso
 	}
 	*/
-	if encrypted, err := cryptoTest.Encrypt(keyBlack, "se vc nao for so vc nao vai"); err != nil {
+	tm1 := time.Now()
+	msg := tm1.String() + "se vc nao for so vc nao vai"
+	if encrypted, err := cryptoTest.Encrypt(keyBlack, msg); err != nil {
 		log.Println(err)
 	} else {
 		log.Printf("CIPHER KEY: %s\n", keyBlack)
@@ -51,12 +53,11 @@ func makePost() {
 		// forma o cabeçalho da mensagem ecrypted
 
 		//time inicial
-		tm1 := time.Now()
-		msg := tm1.String() + encrypted
+
 		formData := url.Values{
 			"token":   {"1234567890"},
 			"queue":   {"filacrypto"},
-			"content": {msg},
+			"content": {encrypted},
 			"action":  {"InsertData"},
 		}
 		log.Printf("enviu: %s\n", msg)
@@ -81,7 +82,7 @@ func createQueue(token string, queue string, tp int) {
 		"action": {"CreateQueue"},
 	}
 
-	resp, err := http.PostForm("http://localhost:8084", formData)
+	resp, err := http.PostForm("http://localhost:8081", formData)
 	if err != nil {
 		log.Fatalln(err)
 	}

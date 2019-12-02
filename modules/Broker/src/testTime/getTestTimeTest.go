@@ -75,7 +75,8 @@ func main() {
 			}
 			log.Printf("recv: %s", message)
 			str := string(message[11:])
-			log.Printf("str: %s", str)
+			log.Printf("msg: %s", str)
+
 			if decrypted, err := cryptoTest.Decrypt(keyBlack, str); err != nil {
 				log.Println("------------------------")
 				log.Println("error found: ")

@@ -319,6 +319,6 @@ func main() {
 	// go broker.listenAndBroadcastQueue("kk", numOfHosts)
 
 	// http.ListenAndServe(":3001", nil)
-	http.ListenAndServe(":8084", nil)
+	http.ListenAndServe(":8081", nil)
 	log.Fatal(http.ListenAndServe(*addr, nil))
 }

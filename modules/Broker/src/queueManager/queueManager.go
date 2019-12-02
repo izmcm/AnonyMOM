@@ -72,7 +72,7 @@ func (manager *AnonyQueueManager) PushMessageToQueue(msg message.AnonyMessage) (
 	// fmt.Printf("push: %p\n", addr)
 	q.Mux.Lock()
 
-	f, err := os.OpenFile("../database/"+msg.Queue+".txt", os.O_APPEND|os.O_WRONLY, 0644)
+	f, err := os.OpenFile("./database/"+msg.Queue+".txt", os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Println(err)
 		return err, false
@@ -120,7 +120,7 @@ func (manager *AnonyQueueManager) GetMessage(name string) (string, error) {
 	// fmt.Printf("get: %p\n", addr)
 	q.Mux.Lock()
 
-	data, err := ioutil.ReadFile("../database/" + name + ".txt")
+	data, err := ioutil.ReadFile("./database/" + name + ".txt")
 	if err != nil {
 		fmt.Println("File reading error", err)
 		return "", err
@@ -129,7 +129,7 @@ func (manager *AnonyQueueManager) GetMessage(name string) (string, error) {
 	msg := sliceData[0]
 
 	totalData := strings.Join(sliceData[1:], "\n")
-	err = ioutil.WriteFile("../database/"+name+".txt", []byte(totalData), 0644)
+	err = ioutil.WriteFile("./database/"+name+".txt", []byte(totalData), 0644)
 
 	// unlock queue mutex
 	q.Mux.Unlock()

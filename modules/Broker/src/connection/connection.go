@@ -355,11 +355,14 @@ func (broker *Broker) broadcastMessage(message string, queue string) {
 			err := c.WriteMessage(websocket.TextMessage, newMessageBytes)
 
 			if err != nil {
+				// for el := broker.HostList.Front(); el != nil; el = el.Next() {
+				// 	log.Println(el.Value.(Host))
+				// }
 				log.Println("write:", err)
 				// WARNING: removing from list, check if cause problems in loop
 				broker.NumOfHostsInQueue[queue] -= 1
-				broker.NumOfHostsInQueueChannel[queue] <- broker.NumOfHostsInQueue[queue]
 				broker.HostList.Remove(host)
+				broker.NumOfHostsInQueueChannel[queue] <- broker.NumOfHostsInQueue[queue]
 				continue
 			}
 		}
