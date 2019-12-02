@@ -6,6 +6,7 @@
 package connection
 
 import (
+	// "anonymize"
 	"container/list"
 	"flag"
 	"fmt"
@@ -18,7 +19,7 @@ import (
 	"queue"
 	"queueManager"
 	"strconv"
-	"strings"
+	// "strings"
 	"time"
 )
 
@@ -343,15 +344,8 @@ func (broker *Broker) broadcastMessage(message string, queue string) {
 		if isMember {
 			c := host.Value.(Host).Connection
 
+			// newMessageBytes := []byte(anonymize.anonymizeMessage(message))
 			newMessageBytes := []byte(message)
-			// set maximum TCP network packet size (1460 bytes)
-			bytesSize := len([]byte(message))
-			if bytesSize < 1460 {
-				trash := strings.Repeat("0", 1459-bytesSize)
-				newMessage := message + ";" + trash
-				newMessageBytes = []byte(newMessage)
-			}
-
 			err := c.WriteMessage(websocket.TextMessage, newMessageBytes)
 
 			if err != nil {
@@ -397,12 +391,4 @@ func main() {
 	fmt.Println("Setting up the HTTP Handler")
 	broker := New("1", "localhost:8082")
 	broker.ListenConnections()
-
-	// manager := queueManager.AnonyQueueManager{UserPool: make(map[string]int)}
-	// broker := Broker{Broker_id: "0", Manager: manager}
-
-	// go broadcastTimer()
-	// go broker.listenAndBroadcastQueue("kk", numOfHosts)
-
-	// http.ListenAndServe(":3001", nil)
 }
