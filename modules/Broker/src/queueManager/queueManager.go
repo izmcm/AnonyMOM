@@ -219,19 +219,3 @@ func (manager *AnonyQueueManager) CheckUserRights(userToken string, q *queue.Ano
 
 	return allow
 }
-
-// func main() {
-// 	// manager := AnonyQueueManager{pool: map[string]int{"Mark": 10, "Sandy": 20}, userPool: make(map[string]queue.AnonyQueue)}
-// 	manager := AnonyQueueManager{userPool: make(map[string]int)}
-// 	message1 := message.AnonyMessage{SenderToken: "men", Queue: "kkk", Content: "oi amor, to ligando pra saber se foi divertido me trair"}
-// 	// manager.insertMessageToQueue(message)
-
-// 	message2 := message.AnonyMessage{SenderToken: "123", Queue: "kkk", Content: "oloko meu2"}
-// 	// manager.insertMessageToQueue(message2)
-
-// 	message3 := message.AnonyMessage{SenderToken: "123", Queue: "kkk", Content: "oloko meu3"}
-// 	// manager.insertMessageToQueue(message3)
-
-// 	// returnMsg := getMessageFromQueue("kkk")
-// 	// fmt.Fprintln(returnMsg)
-// }

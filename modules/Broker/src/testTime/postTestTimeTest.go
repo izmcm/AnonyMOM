@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"time"
 )
 
 // useful functions
@@ -28,6 +29,13 @@ var keyBlack = []byte("0123426789012345")
 
 //--------------------------------------------------------------------------
 func makePost() {
+
+	/*formData := url.Values{
+		"token":   {"1234567890"},
+		"queue":   {"kk"},
+		"content": {"vai te tomar no olho do cu biroliro"}, //tentando isso
+	}
+	*/
 	if encrypted, err := cryptoTest.Encrypt(keyBlack, "se vc nao for so vc nao vai"); err != nil {
 		log.Println(err)
 	} else {
@@ -39,15 +47,17 @@ func makePost() {
 		} else {
 			log.Printf("DECRYPTED: %s\n", decrypted)
 		}
-		// send
 
 		// forma o cabeçalho da mensagem ecrypted
+		tm1 := time.Now()
 		formData := url.Values{
-			"token":   {"1234567890"},
-			"queue":   {"filacrypto"},
-			"content": {encrypted},
-			"action":  {"InsertData"},
+			"token":    {"1234567890"},
+			"queue":    {"filacrypto"},
+			"content":  {encrypted},
+			"action":   {"InsertData"},
+			"initTime": {tm1.String()},
 		}
+
 		//envia a menssagem
 		resp, err := http.PostForm("http://localhost:8084", formData)
 		if err != nil {

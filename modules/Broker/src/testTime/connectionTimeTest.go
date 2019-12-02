@@ -1,9 +1,8 @@
 // TODO: maybe create an engine to allow the host to make a post when you are
 // into the websocket
 
-// TODO: Implement whitelist
-// package main
-package connection
+// TODO: check for the problem of some messages being lost G_G
+package main
 
 import (
 	"container/list"
@@ -18,7 +17,6 @@ import (
 	"queue"
 	"queueManager"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -37,13 +35,6 @@ func RandStringBytes(n int) string {
 type Broker struct {
 	Broker_id string
 	Manager   queueManager.AnonyQueueManager
-	//------------------------
-	HostList                 list.List
-	NumOfHostsInQueueChannel map[string]chan int
-	NumOfHostsInQueue        map[string]int
-	RunningQueues            list.List
-	Upgrader                 websocket.Upgrader
-	Addrs                    string
 }
 
 type Host struct {
@@ -52,32 +43,21 @@ type Host struct {
 	Subscriptions list.List
 }
 
-func New(id string, addrs string) Broker {
-	manager := queueManager.AnonyQueueManager{Pool: make(map[string]*queue.AnonyQueue), UserPool: make(map[string]int)}
-	broker := Broker{Broker_id: id, Manager: manager, Addrs: addrs}
-	broker.NumOfHostsInQueueChannel = make(map[string]chan int)
-	broker.NumOfHostsInQueue = make(map[string]int)
-	broker.Upgrader = websocket.Upgrader{}
-	return broker
-}
-
 // Global variables
-// var HostList list.List
-// var NumOfHostsInQueueChannel map[string]chan int = make(map[string]chan int) // store a list o channels
-// var NumOfHostsInQueue map[string]int = make(map[string]int)                  // store a list o channels
-// var numOfHosts chan int = make(chan int)
-// var RunningQueues list.List
-
-// var Upgrader = websocket.Upgrader{} // use default options
-
-// var Addr = flag.String("Addr", "localhost:8082", "http service Address")
-// var manager queueManager.AnonyQueueManager = queueManager.AnonyQueueManager{Pool: make(map[string]*queue.AnonyQueue), UserPool: make(map[string]int)}
-// var broker Broker = Broker{Broker_id: "0", Manager: manager}
+var hostList list.List
+var numOfHostsInQueueChannel map[string]chan int = make(map[string]chan int) // store a list o channels
+var numOfHostsInQueue map[string]int = make(map[string]int)                  // store a list o channels
+var numOfHosts chan int = make(chan int)
+var addr = flag.String("addr", "localhost:8084", "http service address")
+var upgrader = websocket.Upgrader{} // use default options
+var manager queueManager.AnonyQueueManager = queueManager.AnonyQueueManager{Pool: make(map[string]*queue.AnonyQueue), UserPool: make(map[string]int)}
+var broker Broker = Broker{Broker_id: "0", Manager: manager}
+var runningQueues list.List
 
 /**
  * Treats the data from the HTTP request handler
  **/
-func (broker *Broker) GETandPOST(w http.ResponseWriter, r *http.Request) {
+func (broker Broker) GETandPOST(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
 		return
@@ -110,62 +90,56 @@ func (broker *Broker) GETandPOST(w http.ResponseWriter, r *http.Request) {
 		if upgradeToWebsocket {
 			var queuesNotAllowed list.List
 
-			// TODO: send to the user it's automatic generated token
-			connection := broker.SetupWebsocketConnection(w, r)
+			connection := SetupWebsocketConnection(w, r)
 			host := Host{ID: RandStringBytes(15), Connection: connection}
 			if len(r.Header["token"]) > 0 {
 				host.ID = r.Header["token"][0]
 			}
 			fmt.Println("--------------")
-
-			for _, queueName := range r.Header["Subscriptions"] {
+			// TODO: make the queue control access at here
+			for _, q := range r.Header["Subscriptions"] {
 
 				// Check if the queue exists before let the user subscribe
-				q, err := broker.Manager.GetQueueNamed(queueName)
+				_, err := broker.Manager.GetQueueNamed(q)
 				if err != nil {
-					queuesNotAllowed.PushBack(queueName)
-					fmt.Println("queue named", queueName, "doesn't exist!")
+					queuesNotAllowed.PushBack(q)
+					fmt.Println("queue named", q, "doesn't exist!")
 					continue
 				}
 
-				// Verify if the user can register in the queue before running it
-				canSub := broker.Manager.CheckUserRights(host.ID, q, 0)
-				if !canSub {
-					queuesNotAllowed.PushBack(queueName)
-					fmt.Println("queue named", queueName, "doesn't exist!")
-					continue
-				}
-
-				fmt.Println("subscribed to:", queueName)
+				// TODO: verify if the user can register in the queue before running it
+				fmt.Println("subscribed to:", q)
 				var shouldRun bool = true
 
 				// Check if there's a specific actor for look at this queue
-				for queueElement := broker.RunningQueues.Front(); queueElement != nil && shouldRun; queueElement = queueElement.Next() {
-					if queueElement.Value.(string) == queueName {
+				for queueElement := runningQueues.Front(); queueElement != nil && shouldRun; queueElement = queueElement.Next() {
+					if queueElement.Value.(string) == q {
 						fmt.Println("found queue with the same name here")
 						fmt.Println("1: ", queueElement.Value.(string))
-						fmt.Println("2: ", queueName)
+						fmt.Println("2: ", q)
 						shouldRun = false
 					}
 				}
-
 				// If we need start the broker broadcast for this specific queue
+				// TODO: checkup if we should look in the created queues
 				if shouldRun {
 					// Setup a channel for the queue and start a listenner
-					fmt.Println("Registering listenner and channel for queue", queueName)
-					broker.NumOfHostsInQueueChannel[queueName] = make(chan int)
-					go broker.listenAndBroadcastQueue(queueName)
+					fmt.Println("Registering listenner and channel for queue", q)
+					numOfHostsInQueueChannel[q] = make(chan int)
+					// go broker.listenAndBroadcastQueue(q, numOfHostsInQueueChannel[q])
+					go broker.listenAndBroadcastQueue(q)
 				}
 
-				host.Subscriptions.PushBack(queueName)
-				fmt.Println("Prev in queue <", queueName, ">:", broker.NumOfHostsInQueue[queueName])
-				broker.NumOfHostsInQueue[queueName] += 1
-				fmt.Println("Hosts in queue <", queueName, ">:", broker.NumOfHostsInQueue[queueName])
+				host.Subscriptions.PushBack(q)
+				// WARNING: checkup if the user has a 0 in the first input
+				fmt.Println("Prev in queue <", q, ">:", numOfHostsInQueue[q])
+				numOfHostsInQueue[q] += 1
+				fmt.Println("Hosts in queue <", q, ">:", numOfHostsInQueue[q])
 			}
-			broker.HostList.PushBack(host)
+			hostList.PushBack(host)
 			for _, q := range r.Header["Subscriptions"] {
-				if c, ok := broker.NumOfHostsInQueueChannel[q]; ok {
-					c <- broker.NumOfHostsInQueue[q]
+				if c, ok := numOfHostsInQueueChannel[q]; ok {
+					c <- numOfHostsInQueue[q]
 					fmt.Println()
 				}
 			}
@@ -194,10 +168,9 @@ func (broker *Broker) GETandPOST(w http.ResponseWriter, r *http.Request) {
 				fmt.Println("Type", tp, "not allowed")
 				w.Write([]byte("Queue Cannot be registered, type not allowed"))
 			} else {
-				// queue := queue.AnonyQueue{Name: data["queue"][0], Owner: data["token"][0], Type: tp}
-				queue := queue.New(data["queue"][0], data["token"][0], tp, 0)
-				_, err := broker.Manager.GetQueueNamed(queue.Name)
+				queue := queue.AnonyQueue{Name: data["queue"][0], Owner: data["token"][0], Type: tp}
 
+				_, err := broker.Manager.GetQueueNamed(queue.Name)
 				if err != nil {
 					broker.Manager.RegisterQueue(&queue)
 					fmt.Println("Queue", queue.Name, "registered for user", queue.Owner)
@@ -226,44 +199,7 @@ func (broker *Broker) GETandPOST(w http.ResponseWriter, r *http.Request) {
 				fmt.Println("You are not allowed to insert data in this queue")
 				w.Write([]byte("You are not allowed to insert data in this queue"))
 			}
-		}
-
-		if action == "BlackList" && data["List"] != nil {
-			q, err := broker.Manager.GetQueueNamed(data["queue"][0])
-			if err != nil {
-				fmt.Println("Error blacklisting users\n")
-				w.Write([]byte("Error blacklisting users\n"))
-				return
-			}
-
-			if q.Owner != data["token"][0] {
-				fmt.Println("You don't own this queue\n")
-				fmt.Println("the owner is", q.Owner, "not you,", data["token"][0])
-				w.Write([]byte("You don't own this queue\n"))
-				return
-			}
-
-			if q.Type != 1 {
-				fmt.Println("Queue doesn't support blacklist\n")
-				w.Write([]byte("Queue doesn't support blacklist\n"))
-				return
-			}
-
-			fmt.Println("--------------------")
-			for _, user := range data["List"] {
-				fmt.Println("Blacklisting user", user)
-				q.BlackList.PushBack(user)
-			}
-			fmt.Println("starting serialization")
-			// TODO: new goroutine here
-			q.SerializeQueue()
-			fmt.Println("serialization finished")
-			fmt.Println("--------------------")
-
-		}
-
-		// Request not processed
-		if action == "" {
+		} else {
 			w.Write([]byte("Request Not processed by the server\n"))
 		}
 	default:
@@ -284,8 +220,8 @@ func SelectAction(data url.Values) string {
 }
 
 // make a simple SetupWebsocketConnection server for the websocket service
-func (broker *Broker) SetupWebsocketConnection(w http.ResponseWriter, r *http.Request) *websocket.Conn {
-	c, err := broker.Upgrader.Upgrade(w, r, nil)
+func SetupWebsocketConnection(w http.ResponseWriter, r *http.Request) *websocket.Conn {
+	c, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Print("upgrade:", err)
 		return nil
@@ -296,10 +232,9 @@ func (broker *Broker) SetupWebsocketConnection(w http.ResponseWriter, r *http.Re
 	return c
 }
 
-// A listener to file changes and the subscribers to the queue
-func (broker *Broker) listenAndBroadcastQueue(queue string) {
+func (broker Broker) listenAndBroadcastQueue(queue string) {
 	hostNum := 0
-	c := broker.NumOfHostsInQueueChannel[queue]
+	c := numOfHostsInQueueChannel[queue]
 	for {
 		select {
 		case data := <-c:
@@ -315,7 +250,7 @@ func (broker *Broker) listenAndBroadcastQueue(queue string) {
 				} else {
 					fmt.Println("Making broadcast")
 					fmt.Println()
-					broker.broadcastMessage(message, queue)
+					broadcastMessage(message, queue)
 				}
 			}
 		}
@@ -323,10 +258,10 @@ func (broker *Broker) listenAndBroadcastQueue(queue string) {
 }
 
 // Send a message to all the listenners
-func (broker *Broker) broadcastMessage(message string, queue string) {
+func broadcastMessage(message string, queue string) {
 	id := 0
 	isMember := false
-	for host := broker.HostList.Front(); host != nil; host = host.Next() {
+	for host := hostList.Front(); host != nil; host = host.Next() {
 		isMember = false
 		// TODO: update this id value
 		id += 1
@@ -342,24 +277,13 @@ func (broker *Broker) broadcastMessage(message string, queue string) {
 		// If registered to the queue then send the message to them
 		if isMember {
 			c := host.Value.(Host).Connection
-
-			newMessageBytes := []byte(message)
-			// set maximum TCP network packet size (1460 bytes)
-			bytesSize := len([]byte(message))
-			if bytesSize < 1460 {
-				trash := strings.Repeat("0", 1459-bytesSize)
-				newMessage := message + ";" + trash
-				newMessageBytes = []byte(newMessage)
-			}
-
-			err := c.WriteMessage(websocket.TextMessage, newMessageBytes)
-
+			err := c.WriteMessage(websocket.TextMessage, []byte(message))
 			if err != nil {
 				log.Println("write:", err)
 				// WARNING: removing from list, check if cause problems in loop
-				broker.NumOfHostsInQueue[queue] -= 1
-				broker.NumOfHostsInQueueChannel[queue] <- broker.NumOfHostsInQueue[queue]
-				broker.HostList.Remove(host)
+				numOfHostsInQueue[queue] -= 1
+				numOfHostsInQueueChannel[queue] <- numOfHostsInQueue[queue]
+				hostList.Remove(host)
 				continue
 			}
 		}
@@ -367,7 +291,7 @@ func (broker *Broker) broadcastMessage(message string, queue string) {
 }
 
 // Setup a timer to broadcast a time based message
-func (broker *Broker) broadcastTimer() {
+func broadcastTimer() {
 	fmt.Println("Setting up the timer broadcast")
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
@@ -376,15 +300,9 @@ func (broker *Broker) broadcastTimer() {
 		select {
 		case <-ticker.C:
 			// fmt.Println(t)
-			broker.broadcastMessage("tick", "kk")
+			broadcastMessage("tick", "kk")
 		}
 	}
-}
-
-func (broker *Broker) ListenConnections() {
-	http.HandleFunc("/", broker.GETandPOST)
-	http.ListenAndServe(broker.Addrs, nil)
-	// log.Fatal(http.ListenAndServe(broker.Addr, nil))
 }
 
 func main() {
@@ -392,14 +310,15 @@ func main() {
 	log.SetFlags(0)
 
 	fmt.Println("Setting up the HTTP Handler")
-	broker := New("1", "localhost:8082")
-	broker.ListenConnections()
 
 	// manager := queueManager.AnonyQueueManager{UserPool: make(map[string]int)}
 	// broker := Broker{Broker_id: "0", Manager: manager}
+	http.HandleFunc("/", broker.GETandPOST)
 
 	// go broadcastTimer()
 	// go broker.listenAndBroadcastQueue("kk", numOfHosts)
 
 	// http.ListenAndServe(":3001", nil)
+	http.ListenAndServe(":8084", nil)
+	log.Fatal(http.ListenAndServe(*addr, nil))
 }

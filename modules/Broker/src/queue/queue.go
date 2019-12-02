@@ -57,68 +57,6 @@ func deleteFile(path string) error {
 	return nil
 }
 
-// func PushMessageToQueue(msg message.AnonyMessage) (error, bool) {
-// 	// lock queue mutex
-// 	queue := queueManager.GetQueueNamed(msg.Queue)
-// 	queue.mux.lock()
-
-// 	f, err := os.OpenFile("../database/"+msg.Queue+".txt", os.O_APPEND|os.O_WRONLY, 0644)
-// 	if err != nil {
-// 		fmt.Println(err)
-// 		return err, false
-// 	}
-
-// 	newLine := msg.SenderToken + ";" + msg.Content
-// 	_, err = fmt.Fprintln(f, newLine)
-// 	if err != nil {
-// 		fmt.Println(err)
-// 		f.Close()
-// 		return err, false
-// 	}
-
-// 	err = f.Close()
-// 	if err != nil {
-// 		fmt.Println(err)
-// 		return err, false
-// 	}
-
-// 	return nil, true
-
-// 	// unlock queue mutex
-// 	queue.mux.unlock()
-// }
-
-// func GetMessage(name string) (string, error) {
-// 	// lock queue mutex
-// 	queue := queueManager.GetQueueNamed(name)
-// 	queue.mux.lock()
-
-// 	data, err := ioutil.ReadFile("../database/" + name + ".txt")
-// 	if err != nil {
-// 		fmt.Println("File reading error", err)
-// 		return "", err
-// 	}
-// 	sliceData := strings.Split(string(data), "\n")
-// 	msg := sliceData[0]
-
-// 	totalData := strings.Join(sliceData[1:], "\n")
-// 	err = ioutil.WriteFile("../database/"+name+".txt", []byte(totalData), 0644)
-// 	if err != nil {
-// 		fmt.Println("File reading error", err)
-// 		return "", err
-// 	}
-
-// 	// unlock queue mutex
-// 	queue.mux.unlock()
-
-// 	if msg == "" {
-// 		err := errors.New("Empty queue")
-// 		return msg, err
-// 	}
-
-// 	return msg, nil
-// }
-
 // TODO: implement the system to make the queue persist it's metadata
 // func CreateQueue(name string, owner string, queueType string) (string, error) {
 func (queue *AnonyQueue) CreateQueue() (string, error) {
@@ -253,14 +191,3 @@ func ReadQueueFromFile(queueName string) (AnonyQueue, error) {
 
 	return queue, nil
 }
-
-// func main() {
-// 	msg := message.AnonyMessage{SenderToken: "men", Queue: "kkk", Content: "oi amor, to ligando pra saber se foi divertido me trair"}
-
-// 	createQueue("kkk")
-// 	createQueue("kk1")
-
-// 	pushMessageToQueue(msg)
-// 	msgGet := getMessage("kkk")
-// 	fmt.Println(msgGet)
-// }
