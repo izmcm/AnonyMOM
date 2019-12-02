@@ -49,17 +49,19 @@ func makePost() {
 		}
 
 		// forma o cabeçalho da mensagem ecrypted
-		tm1 := time.Now()
-		formData := url.Values{
-			"token":    {"1234567890"},
-			"queue":    {"filacrypto"},
-			"content":  {encrypted},
-			"action":   {"InsertData"},
-			"initTime": {tm1.String()},
-		}
 
+		//time inicial
+		tm1 := time.Now()
+		msg := tm1.String() + encrypted
+		formData := url.Values{
+			"token":   {"1234567890"},
+			"queue":   {"filacrypto"},
+			"content": {msg},
+			"action":  {"InsertData"},
+		}
+		log.Printf("enviu: %s\n", msg)
 		//envia a menssagem
-		resp, err := http.PostForm("http://localhost:8084", formData)
+		resp, err := http.PostForm("http://localhost:8081", formData)
 		if err != nil {
 			log.Fatalln(err)
 			log.Printf("aqui fudeo")

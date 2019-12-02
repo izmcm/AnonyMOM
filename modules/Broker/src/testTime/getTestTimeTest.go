@@ -6,7 +6,7 @@
 
 // https://medium.com/@masnun/making-http-requests-in-golang-dd123379efe7
 
-package connection
+package main
 
 import (
 	"cryptoTest"
@@ -20,7 +20,7 @@ import (
 	"time"
 )
 
-var addr = flag.String("addr", "localhost:8084", "http service address")
+var addr = flag.String("addr", "localhost:8081", "http service address")
 
 // func makePost() {
 // 	//

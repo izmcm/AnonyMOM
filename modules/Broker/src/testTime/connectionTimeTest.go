@@ -48,7 +48,7 @@ var hostList list.List
 var numOfHostsInQueueChannel map[string]chan int = make(map[string]chan int) // store a list o channels
 var numOfHostsInQueue map[string]int = make(map[string]int)                  // store a list o channels
 var numOfHosts chan int = make(chan int)
-var addr = flag.String("addr", "localhost:8084", "http service address")
+var addr = flag.String("addr", "localhost:8081", "http service address")
 var upgrader = websocket.Upgrader{} // use default options
 var manager queueManager.AnonyQueueManager = queueManager.AnonyQueueManager{Pool: make(map[string]*queue.AnonyQueue), UserPool: make(map[string]int)}
 var broker Broker = Broker{Broker_id: "0", Manager: manager}
